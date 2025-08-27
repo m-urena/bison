@@ -3,4 +3,5 @@ pandas
 numpy
 yfinance
 yahooquery
+fredapi
 plotly
