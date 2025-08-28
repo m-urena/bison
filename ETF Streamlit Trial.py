@@ -322,14 +322,11 @@ asset_opts   = sorted(df["Asset Class"].dropna().unique()) if ("Asset Class" in 
 
 purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts, default=[])
 asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts, default=[])
-fund_search    = st.sidebar.text_input("Search Fund (optional)").strip()
 
 if purpose_filter and "Purpose" in df.columns:
     df = df[df["Purpose"].isin(purpose_filter)]
 if asset_filter and "Asset Class" in df.columns:
     df = df[df["Asset Class"].isin(asset_filter)]
-if fund_search and "Fund" in df.columns:
-    df = df[df["Fund"].str.contains(fund_search, case=False, na=False)]
 
 
 if st.sidebar.button("Refresh data"):
