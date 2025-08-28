@@ -290,6 +290,20 @@ st.sidebar.title("Fund Dashboard")
 start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
 mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
+purpose_opts = sorted(df["Purpose"].dropna().unique()) if not df.empty else []
+asset_opts = sorted(df["Asset Class"].dropna().unique()) if not df.empty else []
+
+purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts, default=[])
+asset_filter = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts, default=[])
+fund_search = st.sidebar.text_input("Search Fund (optional)").strip()
+
+if purpose_filter:
+    df = df[df["Purpose"].isin(purpose_filter)]
+if asset_filter:
+    df = df[df["Asset Class"].isin(asset_filter)]
+if fund_search:
+    df = df[df["Fund"].str.contains(fund_search, case=False, na=False)]
+
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
 
@@ -316,3 +330,6 @@ else:
     df = df.loc[:, cols]
     st.subheader("Vs Each Other")
     st.dataframe(style_table(df), use_container_width=True)
+
+st.dataframe(style_table(df), use_container_width=True)
+
