@@ -82,7 +82,7 @@ def sortino_ratio(series, rf_series_daily):
     dn = ex[ex < 0].std() * np.sqrt(252)
     if dn == 0 or np.isnan(dn):
         return np.nan
-    return (ex.mean() * 252) / dn
+    return round((ex.mean() * 252) / dn,2)
 
 def max_drawdown(r):
     s = pd.Series(r).dropna().astype(float)
