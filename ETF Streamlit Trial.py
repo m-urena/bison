@@ -2,7 +2,6 @@ import numpy as np, pandas as pd, yfinance as yf
 from fredapi import Fred
 from yahooquery import Ticker as YQT
 import streamlit as st
-from datetime import date
 from functools import lru_cache
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
@@ -102,34 +101,37 @@ def max_drawdown(r):
 
 def nearest_on_or_before(idx, ts):
     i = idx.searchsorted(ts, side="right") - 1
-    if i < 0:
-        return None
-    return idx[i]
+    return idx[i] if i >= 0 else None
+
+def nearest_on_or_after(idx, ts):
+    i = idx.searchsorted(ts, side="left")
+    return idx[i] if i < len(idx) else None
 
 def month_end(dt):
-    return (pd.Timestamp(dt).normalize() + pd.offsets.MonthEnd(0)).to_pydatetime()
+    return (pd.Timestamp(dt).normalize() + pd.offsets.MonthEnd(0))
 
 def period_window(index, period_key):
-    index = pd.DatetimeIndex(index)
+    index = pd.DatetimeIndex(index).sort_values()
     last = index[-1]
+
     if period_key == "YTD":
-        start_ts = pd.Timestamp(datetime(last.year, 1, 1))
-        start = nearest_on_or_before(index, start_ts)
+        start_ts = pd.Timestamp(year=last.year, month=1, day=1)
+        start = nearest_on_or_after(index, start_ts)
         if start is None:
             start = index[0]
-        return start, last
-    if period_key in ("1Y","3Y","5Y"):
-        n_years = {"1Y":1,"3Y":3,"5Y":5}[period_key]
+        end = nearest_on_or_before(index, last) or last
+        return start, end
+
+    if period_key in ("1Y", "3Y", "5Y"):
+        n_years = {"1Y": 1, "3Y": 3, "5Y": 5}[period_key]
         end_me = month_end(last)
         start_me = month_end(pd.Timestamp(end_me) - pd.DateOffset(years=n_years))
-        start = nearest_on_or_before(index, pd.Timestamp(start_me))
-        end = nearest_on_or_before(index, pd.Timestamp(end_me))
-        if start is None:
-            start = index[0]
-        if end is None:
-            end = last
+        start = nearest_on_or_before(index, start_me) or index[0]
+        end = nearest_on_or_before(index, end_me) or last
         return start, end
+
     return index[0], last
+
 
 def period_return_from_prices(p, start, end):
     s = pd.Series(p).dropna().astype(float)
