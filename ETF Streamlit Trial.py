@@ -187,30 +187,5 @@ rets = px.pct_change().dropna()
 
 df = build_vs_benchmark(rets) if mode=="Vs Benchmark" else build_vs_each_other(rets)
 
-# Sidebar filters (all optional now)
-purpose_filter = st.sidebar.multiselect(
-    "Filter by Purpose",
-    options=sorted(df["Purpose"].dropna().unique()),
-    default=[]  # nothing selected means no filter applied
-)
-
-asset_filter = st.sidebar.multiselect(
-    "Filter by Asset Class",
-    options=sorted(df["Asset Class"].dropna().unique()),
-    default=[]
-)
-
-ticker_search = st.sidebar.text_input("Search Ticker (optional)").upper().strip()
-
-# Apply filters only if user picked something
-if purpose_filter:
-    df = df[df["Purpose"].isin(purpose_filter)]
-
-if asset_filter:
-    df = df[df["Asset Class"].isin(asset_filter)]
-
-if ticker_search:
-    df = df[df["ETF"].str.contains(ticker_search, case=False, na=False)]
-
 st.subheader(mode)
 st.dataframe(style_table(df, mode), use_container_width=True)
