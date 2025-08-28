@@ -93,6 +93,16 @@ def max_drawdown(r):
     w = (1 + s).cumprod()
     return round(float((1 - w.div(w.cummax())).max()),4)
 
+def ann_cagr(r):
+    r = pd.Series(r).dropna().astype(float)
+    n = len(r)
+    if n < 2:
+        return np.nan
+    gross = (1.0 + r).prod()
+    years = n / 252.0
+    return float(gross**(1.0/years) - 1.0)
+
+
 from functools import lru_cache
 
 @lru_cache(maxsize=None)
@@ -172,68 +182,73 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rets, rf_daily, _v=3):  # bump _v to invalidate old cache
+def build_vs_benchmark(px, rets, rf_daily, _v=4):
     rows = []
-    for etf, meta in etf_map.items():
+    for fund, meta in etf_map.items():
         bench = meta["benchmark"]
-        if etf not in rets.columns or bench not in rets.columns:
+        if fund not in rets.columns or bench not in rets.columns:
             continue
-        z = rets.loc[:, [etf, bench]].dropna()
+        z = rets.loc[:, [fund, bench]].dropna()
         if z.shape[0] < 60:
             continue
 
-        e = z.iloc[:, 0]
+        f = z.iloc[:, 0]
         b = z.iloc[:, 1]
 
+        f_ann = ann_cagr(f)
+        b_ann = ann_cagr(b)
+        ex_ann = f_ann - b_ann
+
+        f_sort = sortino_ratio(f, rf_daily)
+        b_sort = sortino_ratio(b, rf_daily)
+        ex_sort = f_sort - b_sort if pd.notna(f_sort) and pd.notna(b_sort) else np.nan
+
+        f_dd = max_drawdown(f)
+        b_dd = max_drawdown(b)
+        ex_dd = b_dd - f_dd if pd.notna(f_dd) and pd.notna(b_dd) else np.nan  # positive = better
+
         rows.append({
-            "Fund": etf,
+            "Fund": fund,
             "Benchmark": bench,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Fund Total Return (annualized)": float(e.mean() * 252),
-            "Benchmark Total Return (annualized)": float(b.mean() * 252),
-            "Excess Total Return (annualized)": float((e - b).mean() * 252),
-            "Excess Sortino": sortino_ratio(e, rf_daily) - sortino_ratio(b, rf_daily),
-            "Excess Max Drawdown": max_drawdown(b) - max_drawdown(e),  # positive = better
-            "Expense Ratio": get_expense_ratio(etf),                   # <-- same logic as Vs Each Other
-            "Dividend Yield %": get_dividend_yield(etf),
+            "Fund Total Return (annualized)": f_ann,
+            "Benchmark Total Return (annualized)": b_ann,
+            "Excess Total Return (annualized)": ex_ann,
+            "Excess Sortino": ex_sort,
+            "Excess Max Drawdown": ex_dd,
+            "Expense Ratio": get_expense_ratio(fund),
+            "Dividend Yield %": get_dividend_yield(fund),
         })
 
     df = pd.DataFrame(rows)
-
-    # Force numeric so Streamlit doesn't show "None" and styling formats as %
     for c in ("Expense Ratio", "Dividend Yield %"):
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
-
     return df
 
 
 @st.cache_data(ttl=1800)
 def build_vs_each_other_simple(rets, rf_daily):
     rows = []
-    for etf, meta in etf_map.items():
-        if etf not in rets.columns:
+    for fund, meta in etf_map.items():
+        if fund not in rets.columns:
             continue
-        r = rets.loc[:, [etf]].dropna().iloc[:, 0]
+        r = rets.loc[:, [fund]].dropna().iloc[:, 0]
         if r.shape[0] < 60:
             continue
-        ann_ret = float(r.mean() * 252)
-        sr = sortino_ratio(r, rf_daily)
-        mdd = max_drawdown(r)
-        exp_ratio = get_expense_ratio(etf)
-        dy = get_dividend_yield(etf)
+
         rows.append({
-            "Fund": etf,
+            "Fund": fund,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Total Return (annualized)": ann_ret,
-            "Sortino": sr,
-            "Max Drawdown": mdd,
-            "Expense Ratio": exp_ratio,
-            "Dividend Yield %": dy
+            "Total Return (annualized)": ann_cagr(r),
+            "Sortino": sortino_ratio(r, rf_daily),
+            "Max Drawdown": max_drawdown(r),
+            "Expense Ratio": get_expense_ratio(fund),
+            "Dividend Yield %": get_dividend_yield(fund),
         })
     return pd.DataFrame(rows)
 
@@ -327,7 +342,7 @@ purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opt
 asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts)
 
 df_view = df.copy()
-if purpose_filter:  # only filter if user selected
+if purpose_filter:
     df_view = df_view[df_view["Purpose"].isin(purpose_filter)]
 if asset_filter:
     df_view = df_view[df_view["Asset Class"].isin(asset_filter)]
