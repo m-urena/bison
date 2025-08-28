@@ -104,9 +104,7 @@ def get_expense_ratio(ticker):
     try:
         from yahooquery import Ticker as YQT
         yq = YQT(ticker)
-
         v = None
-
         prof = yq.fund_profile
         if isinstance(prof, dict) and ticker in prof:
             fees = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating") or {}
@@ -114,7 +112,6 @@ def get_expense_ratio(ticker):
                 if fees.get(k) is not None:
                     v = fees[k]
                     break
-
         if v is None:
             sd = yq.summary_detail
             if isinstance(sd, dict) and ticker in sd:
@@ -122,23 +119,15 @@ def get_expense_ratio(ticker):
                     if sd[ticker].get(k) is not None:
                         v = sd[ticker][k]
                         break
-
         if v is None:
             yi = yf.Ticker(ticker).info or {}
             v = yi.get("expenseRatio")
 
         if v is None:
             return np.nan
-
         v = float(v)
-
-        # Normalize units:
-        # - APIs sometimes return percent (e.g., 0.19 for 0.19%) or fraction (0.0019)
-        # - Heuristic: if >= 0.05 (>=5%), it’s almost certainly a percent → divide by 100
-        #   and also guard absurd values (>5) by dividing by 100.
         if v >= 0.05 or v > 5:
             v = v / 100.0
-
         return round(v, 6)
     except Exception:
         return np.nan
@@ -183,7 +172,7 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rets, rf_daily):
+def build_vs_benchmark(px, rets, rf_daily, _v=2):  # bump _v to invalidate cache
     rows = []
     for etf, meta in etf_map.items():
         bench = meta["benchmark"]
@@ -192,34 +181,27 @@ def build_vs_benchmark(px, rets, rf_daily):
         z = rets.loc[:, [etf, bench]].dropna()
         if z.shape[0] < 60:
             continue
-        etf_ret = z.iloc[:, 0]
-        bench_ret = z.iloc[:, 1]
-        etf_ann = float(etf_ret.mean() * 252)
-        bench_ann = float(bench_ret.mean() * 252)
-        ex_ret_ann = float((etf_ret - bench_ret).mean() * 252)
-        etf_sort = sortino_ratio(etf_ret, rf_daily)
-        bench_sort = sortino_ratio(bench_ret, rf_daily)
-        ex_sort = etf_sort - bench_sort if pd.notna(etf_sort) and pd.notna(bench_sort) else np.nan
-        etf_dd = max_drawdown(etf_ret)
-        bench_dd = max_drawdown(bench_ret)
-        ex_dd = bench_dd - etf_dd if pd.notna(etf_dd) and pd.notna(bench_dd) else np.nan
-        exp_ratio = get_expense_ratio(etf)
-        dy = get_dividend_yield(etf)
+        e = z.iloc[:, 0]; b = z.iloc[:, 1]
         rows.append({
             "Fund": etf,
             "Benchmark": bench,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Fund Total Return (annualized)": etf_ann,
-            "Benchmark Total Return (annualized)": bench_ann,
-            "Excess Total Return (annualized)": ex_ret_ann,
-            "Excess Sortino": ex_sort,
-            "Excess Max Drawdown": ex_dd,
-            "Expense Ratio": exp_ratio,
-            "Dividend Yield %": dy
+            "Fund Total Return (annualized)": float(e.mean()*252),
+            "Benchmark Total Return (annualized)": float(b.mean()*252),
+            "Excess Total Return (annualized)": float((e-b).mean()*252),
+            "Excess Sortino": sortino_ratio(e, rf_daily) - sortino_ratio(b, rf_daily),
+            "Excess Max Drawdown": max_drawdown(b) - max_drawdown(e),  # positive = better
+            "Expense Ratio": get_expense_ratio(etf),
+            "Dividend Yield %": get_dividend_yield(etf),
         })
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    for c in ["Expense Ratio", "Dividend Yield %"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
 
 @st.cache_data(ttl=1800)
 def build_vs_each_other_simple(rets, rf_daily):
