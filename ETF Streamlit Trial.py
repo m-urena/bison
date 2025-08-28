@@ -54,7 +54,7 @@ etf_map = {
 @st.cache_data(ttl=3600)
 def load_prices(start):
     tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
-    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)["Adj Close"]#change to Adj Close auto_adjust=True for total return
+    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)["Adj Close"]#change to Close for price return not total
     px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
     px = px[~px.index.duplicated(keep="last")].sort_index()
     return px
@@ -176,9 +176,9 @@ def build_vs_benchmark(px, rets, rf_daily):
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Fund Return (annualized)": etf_ann,
-            "Benchmark Return (annualized)": bench_ann,
-            "Excess Return (annualized)": ex_ret_ann,
+            "Fund Total Return (annualized)": etf_ann,
+            "Benchmark Total Return (annualized)": bench_ann,
+            "Excess Total Return (annualized)": ex_ret_ann,
             "Excess Sortino": ex_sort,
             "Excess Max Drawdown": ex_dd,
             "Expense Ratio": exp_ratio,
@@ -205,7 +205,7 @@ def build_vs_each_other_simple(rets, rf_daily):
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Return (annualized)": ann_ret,
+            "Total Return (annualized)": ann_ret,
             "Sortino": sr,
             "Max Drawdown": mdd,
             "Expense Ratio": exp_ratio,
@@ -214,7 +214,7 @@ def build_vs_each_other_simple(rets, rf_daily):
     return pd.DataFrame(rows)
 
 def add_bench_points(df):
-    er = pd.to_numeric(df.get("Excess Return (annualized)"), errors="coerce")
+    er = pd.to_numeric(df.get("Excess Total Return (annualized)"), errors="coerce")
     es = pd.to_numeric(df.get("Excess Sortino"), errors="coerce")
     dy = pd.to_numeric(df.get("Dividend Yield %"), errors="coerce")/100.0
     pts = ((er > -0.01).astype(int) + (es > -0.05).astype(int) + (dy > 0.025).astype(int)).fillna(0).astype(int)
@@ -227,7 +227,7 @@ def quartile_points(s):
     return pd.cut(r, bins=[0,0.25,0.5,0.75,1.0000001], labels=[0,1,2,3], include_lowest=True).astype(float).fillna(0).astype(int)
 
 def add_each_points(df):
-    p = quartile_points(df.get("Return (annualized)")) + quartile_points(df.get("Sortino")) + quartile_points(df.get("Dividend Yield %"))
+    p = quartile_points(df.get("Total Return (annualized)")) + quartile_points(df.get("Sortino")) + quartile_points(df.get("Dividend Yield %"))
     df["Points"] = p.astype(int)
     df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow"], default="Green")
     return df
@@ -244,10 +244,10 @@ def style_table(df):
         return ""
 
     pct_cols = [c for c in df.columns if c in [
-        "Fund Return (annualized)",
-        "Benchmark Return (annualized)",
-        "Excess Return (annualized)",
-        "Return (annualized)",
+        "Fund Total Return (annualized)",
+        "Benchmark Total Return (annualized)",
+        "Excess Total Return (annualized)",
+        "Total Return (annualized)",
         "Max Drawdown",
         "Excess Max Drawdown",
     ]]
@@ -283,7 +283,7 @@ rets = prices.pct_change().dropna()
 if mode == "Vs Benchmark":
     df = build_vs_benchmark(prices, rets, rf_daily).copy()
     df = add_bench_points(df)
-    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","ETF Return (annualized)","Benchmark Return (annualized)","Excess Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Total Return (annualized)","Benchmark Total Return (annualized)","Excess Total Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     cols = [c for c in cols if c in df.columns]
     df = df.loc[:, cols]
     st.subheader("Vs Benchmark")
@@ -291,7 +291,7 @@ if mode == "Vs Benchmark":
 else:
     df = build_vs_each_other_simple(rets, rf_daily).copy()
     df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy","Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Asset Class","Purpose","Strategy","Total Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     cols = [c for c in cols if c in df.columns]
     df = df.loc[:, cols]
     st.subheader("Vs Each Other")
