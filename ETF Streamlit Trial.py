@@ -5,14 +5,14 @@ import streamlit as st
 from datetime import date
 
 
-st.set_page_config(page_title="ETF Traffic Lights", layout="wide")
+st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
 etf_map = {
-    "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Crypto"},
+    "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income",       "strategy": "Foreign"},
     "QQQ":   {"benchmark": "QQQ",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
     "DNLIX": {"benchmark": "SPY",  "asset_class": "Alt", "purpose": "Preservation", "strategy": "Hedged"},
-    "AVUV":  {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Value"},
+    "AVUV":  {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Small Cap"},
     "GRID":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "XMMO":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
     "PAVE":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
@@ -20,7 +20,7 @@ etf_map = {
     "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
     "OVLH":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
     "DGRW":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
-    "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Balanced"},
+    "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Mid Cap"},
     "KHPI":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
     "IEF":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
     "ICSH":  {"benchmark": "BIL","asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
@@ -29,8 +29,8 @@ etf_map = {
     "BIL":   {"benchmark": "BIL","asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
     "ESIIX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
     "SHY":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "OVB":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Overlay"},
-    "OVT":   {"benchmark": "VCSH", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Overlay"},
+    "OVB":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Core Bond"},
+    "OVT":   {"benchmark": "VCSH", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Short Term Bond"},
     "CLOB":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
     "HYMB":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
     "MBSF":  {"benchmark": "MBB",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
@@ -39,8 +39,8 @@ etf_map = {
     "IEI":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
     "NAGRX": {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Core Bond"},
     "IWF":   {"benchmark": "IWF",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "OVS":   {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Overlay"},
-    "OVL":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Overlay"},
+    "OVS":   {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Small Cap"},
+    "OVL":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Large Cap"},
     "OVM":   {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Municipal"},
     "CLOI":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
     "FIW":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
@@ -91,7 +91,7 @@ def max_drawdown(r):
     if s.empty:
         return np.nan
     w = (1 + s).cumprod()
-    return float((1 - w.div(w.cummax())).max())
+    return round(float((1 - w.div(w.cummax())).max()),2)
 
 def get_expense_ratio(ticker):
     if ticker in ["NAGRX","DNLIX"]:
@@ -104,12 +104,14 @@ def get_expense_ratio(ticker):
         if isinstance(prof, dict) and ticker in prof:
             d = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating")
             if d and isinstance(d, dict):
-                return d.get("annualReportExpenseRatio")
+                return round(d.get("annualReportExpenseRatio"),2)
     except:
         return np.nan
     return np.nan
 
 def get_dividend_yield(ticker):
+    if ticker in["IGLD"]:
+        return 15.68
     try:
         t = yf.Ticker(ticker)
         divs = t.dividends
