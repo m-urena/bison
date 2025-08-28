@@ -268,7 +268,7 @@ rets = prices.pct_change().dropna()
 if mode == "Vs Benchmark":
     df = build_vs_benchmark(prices, rets, rf_daily).copy()
     df = add_bench_points(df)
-    cols = ["ETF","Benchmark","ETF Return (annualized)","Benchmark Return (annualized)","Excess Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color","Asset Class","Purpose","Strategy"]
+    cols = ["ETF","Benchmark","Asset Class","Purpose","Strategy","ETF Return (annualized)","Benchmark Return (annualized)","Excess Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     cols = [c for c in cols if c in df.columns]
     df = df.loc[:, cols]
     st.subheader("Vs Benchmark")
@@ -276,7 +276,7 @@ if mode == "Vs Benchmark":
 else:
     df = build_vs_each_other_simple(rets, rf_daily).copy()
     df = add_each_points(df)
-    cols = ["ETF","Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color","Asset Class","Purpose","Strategy"]
+    cols = ["ETF","Asset Class","Purpose","Strategy","Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     cols = [c for c in cols if c in df.columns]
     df = df.loc[:, cols]
     st.subheader("Vs Each Other")
