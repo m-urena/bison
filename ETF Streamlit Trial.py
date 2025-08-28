@@ -300,32 +300,38 @@ rets = prices.pct_change().dropna()
 if mode == "Vs Benchmark":
     df = build_vs_benchmark(prices, rets, rf_daily).copy()
     df = add_bench_points(df)
-    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Total Return (annualized)","Benchmark Total Return (annualized)","Excess Total Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy",
+            "Fund Total Return (annualized)","Benchmark Total Return (annualized)",
+            "Excess Total Return (annualized)","Excess Sortino","Excess Max Drawdown",
+            "Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Benchmark"
 else:
     df = build_vs_each_other_simple(rets, rf_daily).copy()
     df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy","Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Asset Class","Purpose","Strategy","Return (annualized)","Sortino",
+            "Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Each Other"
 
+# Sidebar filters (all optional)
 purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
 asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
 
-purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts, default=[])
-asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts, default=[])
+purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts)
+asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts)
 fund_search    = st.sidebar.text_input("Search Fund (optional)").strip()
 
 df_view = df.copy()
-if purpose_filter and "Purpose" in df_view.columns:
+if purpose_filter:  # only filter if user selected
     df_view = df_view[df_view["Purpose"].isin(purpose_filter)]
-if asset_filter and "Asset Class" in df_view.columns:
+if asset_filter:
     df_view = df_view[df_view["Asset Class"].isin(asset_filter)]
-if fund_search and "Fund" in df_view.columns:
+if fund_search:
     df_view = df_view[df_view["Fund"].str.contains(fund_search, case=False, na=False)]
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
 
 st.subheader(view_title)
+st.dataframe(style_table(df_view), use_container_width=True)
