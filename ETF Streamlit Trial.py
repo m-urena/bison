@@ -1,14 +1,5 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import yfinance as yf
-from datetime import date
-
 st.set_page_config(page_title="ETF Traffic Lights", layout="wide")
 
-# ----------------------------
-# ETF MAP
-# ----------------------------
 etf_map = {
     "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Crypto"},
     "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income",       "strategy": "Foreign"},
@@ -53,20 +44,47 @@ etf_map = {
     "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
-# ----------------------------
-# HELPERS
-# ----------------------------
+@st.cache_data(ttl=3600)
+def load_prices(start):
+    tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
+    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)["Close"]
+    px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
+    px = px[~px.index.duplicated(keep="last")].sort_index()
+    return px
+
+@st.cache_data(ttl=3600)
+def load_rf_daily(start):
+    try:
+        from fredapi import Fred
+        key = st.secrets.get("FRED_API_KEY", None)
+        if not key:
+            raise RuntimeError("no key")
+        fred = Fred(api_key=key)
+        rf = fred.get_series("DGS1", start).astype(float)/100.0
+        rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")).ffill()
+        rf_daily = (1.0 + rf_df["RF"]).pow(1/252.0) - 1.0
+        rf_daily.name = "RF"
+        return rf_daily
+    except:
+        idx = pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")
+        return pd.Series(0.0, index=idx, name="RF")
+
 def sortino_ratio(series, rf_series_daily):
     z = pd.concat([pd.Series(series).dropna(), rf_series_daily], axis=1).dropna()
-    if z.empty: return np.nan
+    if z.empty:
+        return np.nan
     ex = z.iloc[:,0] - z.iloc[:,1]
     dn = ex[ex < 0].std() * np.sqrt(252)
-    if dn == 0 or np.isnan(dn): return np.nan
+    if dn == 0 or np.isnan(dn):
+        return np.nan
     return (ex.mean() * 252) / dn
 
 def max_drawdown(r):
     s = pd.Series(r).dropna().astype(float)
-    if s.empty: return np.nan
+    if s.ndim != 1:
+        s = s.squeeze()
+    if s.empty:
+        return np.nan
     w = (1 + s).cumprod()
     return float((1 - w.div(w.cummax())).max())
 
@@ -105,87 +123,136 @@ def get_dividend_yield(ticker):
         return round((float(total)/float(price))*100,2)
     except:
         return np.nan
-
-# ----------------------------
-# CALCULATIONS
-# ----------------------------
-def build_vs_benchmark(rets):
+@st.cache_data(ttl=1800)
+def build_vs_benchmark(px, rets, rf_daily):
     rows = []
     for etf, meta in etf_map.items():
         bench = meta["benchmark"]
-        if etf not in rets.columns or bench not in rets.columns: continue
+        if etf not in rets.columns or bench not in rets.columns:
+            continue
         z = rets.loc[:, [etf, bench]].dropna()
-        if z.shape[0] < 60: continue
-        etf_ret, bench_ret = z.iloc[:,0], z.iloc[:,1]
+        if z.shape[0] < 60:
+            continue
+        etf_ret = z.iloc[:, 0]
+        bench_ret = z.iloc[:, 1]
+        etf_ann = float(etf_ret.mean() * 252)
+        bench_ann = float(bench_ret.mean() * 252)
+        ex_ret_ann = float((etf_ret - bench_ret).mean() * 252)
+        etf_sort = sortino_ratio(etf_ret, rf_daily)
+        bench_sort = sortino_ratio(bench_ret, rf_daily)
+        ex_sort = etf_sort - bench_sort if pd.notna(etf_sort) and pd.notna(bench_sort) else np.nan
+        etf_dd = max_drawdown(etf_ret)
+        bench_dd = max_drawdown(bench_ret)
+        ex_dd = etf_dd - bench_dd if pd.notna(etf_dd) and pd.notna(bench_dd) else np.nan
+        exp_ratio = get_expense_ratio(etf)
+        dy = get_dividend_yield(etf)
         rows.append({
             "ETF": etf,
             "Benchmark": bench,
-            "Purpose": meta["purpose"],
             "Asset Class": meta["asset_class"],
+            "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "ETF Return (annualized)": etf_ret.mean()*252,
-            "Benchmark Return (annualized)": bench_ret.mean()*252,
-            "Excess Return (annualized)": (etf_ret - bench_ret).mean()*252,
-            "Excess Sortino": sortino_ratio(etf_ret, pd.Series(0, index=etf_ret.index)) - sortino_ratio(bench_ret, pd.Series(0, index=bench_ret.index)),
-            "Excess Max Drawdown": max_drawdown(etf_ret) - max_drawdown(bench_ret),
-            "Expense Ratio": get_expense_ratio(etf),
-            "Dividend Yield %": get_dividend_yield(etf)
+            "ETF Return (annualized)": etf_ann,
+            "Benchmark Return (annualized)": bench_ann,
+            "Excess Return (annualized)": ex_ret_ann,
+            "Excess Sortino": ex_sort,
+            "Excess Max Drawdown": ex_dd,
+            "Expense Ratio": exp_ratio,
+            "Dividend Yield %": dy
         })
-    df = pd.DataFrame(rows)
-    df["Points"] = ((df["Excess Return (annualized)"] > -0.01).astype(int) + (df["Excess Sortino"] > -0.05).astype(int) + (df["Dividend Yield %"].fillna(0)/100 > 0.025).astype(int))
+    return pd.DataFrame(rows)
+
+@st.cache_data(ttl=1800)
+def build_vs_each_other_simple(rets, rf_daily):
+    rows = []
+    for etf, meta in etf_map.items():
+        if etf not in rets.columns:
+            continue
+        r = rets.loc[:, [etf]].dropna().iloc[:, 0]
+        if r.shape[0] < 60:
+            continue
+        ann_ret = float(r.mean() * 252)
+        sr = sortino_ratio(r, rf_daily)
+        mdd = max_drawdown(r)
+        exp_ratio = get_expense_ratio(etf)
+        dy = get_dividend_yield(etf)
+        rows.append({
+            "ETF": etf,
+            "Asset Class": meta["asset_class"],
+            "Purpose": meta["purpose"],
+            "Strategy": meta["strategy"],
+            "Return (annualized)": ann_ret,
+            "Sortino": sr,
+            "Max Drawdown": mdd,
+            "Expense Ratio": exp_ratio,
+            "Dividend Yield %": dy
+        })
+    return pd.DataFrame(rows)
+
+def add_bench_points(df):
+    er = pd.to_numeric(df.get("Excess Return (annualized)"), errors="coerce")
+    es = pd.to_numeric(df.get("Excess Sortino"), errors="coerce")
+    dy = pd.to_numeric(df.get("Dividend Yield %"), errors="coerce")/100.0
+    pts = ((er > -0.01).astype(int) + (es > -0.05).astype(int) + (dy > 0.025).astype(int)).fillna(0).astype(int)
+    df["Points"] = pts
     df["Color"] = np.select([df["Points"]>=2, df["Points"]==1], ["Green","Yellow"], default="Red")
     return df
 
-def build_vs_each_other(rets):
-    rows = []
-    for etf, meta in etf_map.items():
-        if etf not in rets.columns: continue
-        r = rets.loc[:, [etf]].dropna().iloc[:,0]
-        if r.shape[0] < 60: continue
-        rows.append({
-            "ETF": etf,
-            "Purpose": meta["purpose"],
-            "Asset Class": meta["asset_class"],
-            "Strategy": meta["strategy"],
-            "Return (annualized)": r.mean()*252,
-            "Sortino": sortino_ratio(r, pd.Series(0, index=r.index)),
-            "Max Drawdown": max_drawdown(r),
-            "Expense Ratio": get_expense_ratio(etf),
-            "Dividend Yield %": get_dividend_yield(etf)
-        })
-    df = pd.DataFrame(rows)
-    def quartile_points(s):
-        r = pd.to_numeric(s, errors="coerce").rank(pct=True, method="average")
-        return pd.cut(r, bins=[0,0.25,0.5,0.75,1.0000001], labels=[0,1,2,3], include_lowest=True).astype(float).fillna(0).astype(int)
-    df["Points"] = quartile_points(df["Return (annualized)"]) + quartile_points(df["Sortino"]) + quartile_points(df["Dividend Yield %"])
+def quartile_points(s):
+    r = pd.to_numeric(s, errors="coerce").rank(pct=True, method="average")
+    return pd.cut(r, bins=[0,0.25,0.5,0.75,1.0000001], labels=[0,1,2,3], include_lowest=True).astype(float).fillna(0).astype(int)
+
+def add_each_points(df):
+    p = quartile_points(df.get("Return (annualized)")) + quartile_points(df.get("Sortino")) + quartile_points(df.get("Dividend Yield %"))
+    df["Points"] = p.astype(int)
     df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow"], default="Green")
     return df
 
 def style_table(df, view):
     order_map = {"Green":0, "Yellow":1, "Red":2}
-    df = df.assign(_c=df["Color"].map(order_map)).sort_values(["_c","Points"], ascending=[True,False]).drop(columns=["_c"])
+    if view == "Vs Benchmark":
+        sort_cols = ["Color","Points","Excess Return (annualized)"]
+    else:
+        sort_cols = ["Color","Points","Return (annualized)"]
+    if "Color" in df.columns:
+        df = df.assign(_c=df["Color"].map(order_map)).sort_values(["_c"]+sort_cols[1:], ascending=[True, False, False]).drop(columns=["_c"])
+    st_cols = [c for c in df.columns]
     def color_css(v):
-        if v=="Green": return "background-color:#d6f5d6; color:#0a0a0a"
-        if v=="Yellow": return "background-color:#fff5bf; color:#0a0a0a"
-        if v=="Red": return "background-color:coral; color:#0a0a0a"
+        if v == "Green": return "background-color:#d6f5d6; color:#0a0a0a"
+        if v == "Yellow": return "background-color:#fff5bf; color:#0a0a0a"
+        if v == "Red": return "background-color:coral; color:#0a0a0a"
         return ""
-    styler = df.style.map(color_css, subset=["Color"])
-    try: styler = styler.hide(axis="index")
-    except: pass
+    styler = df.style.set_table_styles([{"selector":"th","props":[("position","sticky"),("top","0"),("background","#f5f5f5")]}]).set_properties(**{"border":"1px solid #ddd","font-size":"13px","font-family":"sans-serif"}).map(color_css, subset=pd.IndexSlice[:, ["Color"]])
+    try:
+        styler = styler.hide(axis="index")
+    except:
+        pass
     return styler
 
-# ----------------------------
-# STREAMLIT APP
-# ----------------------------
 st.sidebar.title("ETF Traffic Lights")
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"])
 start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
+mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
-# fake price data for now
-px = yf.download(list(etf_map.keys()), start=start_date, end=date.today(), progress=False)["Close"]
-rets = px.pct_change().dropna()
+prices = load_prices(start_date)
+rf_daily = load_rf_daily(start_date)
+common_idx = prices.index.intersection(rf_daily.index)
+prices = prices.loc[common_idx]
+rf_daily = rf_daily.loc[common_idx]
+rets = prices.pct_change().dropna()
 
-df = build_vs_benchmark(rets) if mode=="Vs Benchmark" else build_vs_each_other(rets)
-
-st.subheader(mode)
-st.dataframe(style_table(df, mode), use_container_width=True)
+if mode == "Vs Benchmark":
+    df = build_vs_benchmark(prices, rets, rf_daily).copy()
+    df = add_bench_points(df)
+    cols = ["ETF","Benchmark","ETF Return (annualized)","Benchmark Return (annualized)","Excess Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color","Asset Class","Purpose","Strategy"]
+    cols = [c for c in cols if c in df.columns]
+    df = df.loc[:, cols]
+    st.subheader("Vs Benchmark")
+    st.dataframe(style_table(df, "Vs Benchmark"), use_container_width=True)
+else:
+    df = build_vs_each_other_simple(rets, rf_daily).copy()
+    df = add_each_points(df)
+    cols = ["ETF","Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color","Asset Class","Purpose","Strategy"]
+    cols = [c for c in cols if c in df.columns]
+    df = df.loc[:, cols]
+    st.subheader("Vs Each Other")
+    st.dataframe(style_table(df, "Vs Each Other"), use_container_width=True)
