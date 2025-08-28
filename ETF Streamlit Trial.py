@@ -93,21 +93,56 @@ def max_drawdown(r):
     w = (1 + s).cumprod()
     return round(float((1 - w.div(w.cummax())).max()),4)
 
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
     if ticker in ["NAGRX","DNLIX"]:
         return 0.0199
     if ticker in ["DFNDX"]:
         return 0.0204
     try:
-        from yahooquery import Ticker
-        prof = Ticker(ticker).fund_profile
+        from yahooquery import Ticker as YQT
+        yq = YQT(ticker)
+
+        v = None
+
+        prof = yq.fund_profile
         if isinstance(prof, dict) and ticker in prof:
-            d = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating")
-            if d and isinstance(d, dict):
-                return round(d.get("annualReportExpenseRatio"),4)
-    except:
+            fees = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating") or {}
+            for k in ("annualReportExpenseRatio", "netExpRatio", "grossExpRatio", "expenseRatio"):
+                if fees.get(k) is not None:
+                    v = fees[k]
+                    break
+
+        if v is None:
+            sd = yq.summary_detail
+            if isinstance(sd, dict) and ticker in sd:
+                for k in ("annualReportExpenseRatio", "expenseRatio"):
+                    if sd[ticker].get(k) is not None:
+                        v = sd[ticker][k]
+                        break
+
+        if v is None:
+            yi = yf.Ticker(ticker).info or {}
+            v = yi.get("expenseRatio")
+
+        if v is None:
+            return np.nan
+
+        v = float(v)
+
+        # Normalize units:
+        # - APIs sometimes return percent (e.g., 0.19 for 0.19%) or fraction (0.0019)
+        # - Heuristic: if >= 0.05 (>=5%), it’s almost certainly a percent → divide by 100
+        #   and also guard absurd values (>5) by dividing by 100.
+        if v >= 0.05 or v > 5:
+            v = v / 100.0
+
+        return round(v, 6)
+    except Exception:
         return np.nan
-    return np.nan
+
 
 def get_dividend_yield(ticker):
     try:
