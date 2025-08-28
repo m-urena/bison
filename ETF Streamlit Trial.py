@@ -17,9 +17,9 @@ etf_map = {
     "XMMO":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
     "PAVE":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "OVF":   {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Foreign"},
-    "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
+    "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"}, 
     "OVLH":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "DGRW":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
+    "DGRW":  {"benchmark": "SCHD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},#was compared with SPY, changed to SCHD given they do the same thing
     "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Mid Cap"},
     "KHPI":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
     "IEF":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
@@ -112,7 +112,6 @@ def get_expense_ratio(ticker):
 def get_dividend_yield(ticker):
     try:
         t = yf.Ticker(ticker)
-        # First, prefer Yahoo's trailing yield if present (already a fraction, e.g. 0.1568)
         try:
             info = t.info or {}
         except Exception:
@@ -168,7 +167,7 @@ def build_vs_benchmark(px, rets, rf_daily):
         ex_sort = etf_sort - bench_sort if pd.notna(etf_sort) and pd.notna(bench_sort) else np.nan
         etf_dd = max_drawdown(etf_ret)
         bench_dd = max_drawdown(bench_ret)
-        ex_dd = etf_dd - bench_dd if pd.notna(etf_dd) and pd.notna(bench_dd) else np.nan
+        ex_dd = bench_dd - etf_dd if pd.notna(etf_dd) and pd.notna(bench_dd) else np.nan
         exp_ratio = get_expense_ratio(etf)
         dy = get_dividend_yield(etf)
         rows.append({
