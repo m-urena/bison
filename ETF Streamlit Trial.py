@@ -136,32 +136,32 @@ def period_window(index, period_key):
 
 def _to_1d_series(p):
     if isinstance(p, pd.Series):
-        s = p
-    elif isinstance(p, pd.DataFrame):
-        if p.shape[1] == 1:
-            s = p.iloc[:, 0]
-        else:
-            s = p.squeeze()
-    else:
-        a = np.asarray(p)
-        if a.ndim == 1:
-            s = pd.Series(a)
-        elif a.ndim == 2 and a.shape[1] == 1:
-            s = pd.Series(a[:, 0])
-        else:
-            raise ValueError("Expected 1D series")
-    return pd.to_numeric(pd.Series(s).dropna(), errors="coerce")
+        return pd.to_numeric(p.dropna(), errors="coerce")
+
+    if isinstance(p, pd.DataFrame):
+        if p.shape[1] != 1:
+            raise ValueError(f"Expected 1 column, got {p.shape[1]}")
+        return pd.to_numeric(p.iloc[:, 0].dropna(), errors="coerce")
+
+    a = np.asarray(p)
+    if a.ndim == 1:
+        return pd.to_numeric(pd.Series(a).dropna(), errors="coerce")
+    if a.ndim == 2 and a.shape[1] == 1:
+        return pd.to_numeric(pd.Series(a[:, 0]).dropna(), errors="coerce")
+    raise ValueError(f"Expected 1D input, got shape {a.shape}")
 
 def period_return_from_prices(p, start, end):
     s = _to_1d_series(p)
+    # guard: ensure datetime index, sorted, unique
+    if not isinstance(s.index, pd.DatetimeIndex):
+        s.index = pd.to_datetime(s.index, utc=True, errors="coerce").tz_convert(None)
+    s = s.dropna()
+    s = s[~s.index.duplicated(keep="last")].sort_index()
     s = s.loc[(s.index >= start) & (s.index <= end)]
     if s.size < 2:
         return np.nan
     yrs = (s.index[-1] - s.index[0]).days / 365.25
-    if yrs >= 1.0:
-        return float((s.iloc[-1] / s.iloc[0])**(1.0/yrs) - 1.0)
-    else:
-        return float(s.iloc[-1] / s.iloc[0] - 1.0)
+    return float((s.iloc[-1] / s.iloc[0])**(1.0/yrs) - 1.0) if yrs >= 1.0 else float(s.iloc[-1] / s.iloc[0] - 1.0)
 
 
 @lru_cache(maxsize=None)
@@ -236,7 +236,7 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rf_daily, period_key, _v=8):
+def build_vs_benchmark(px, rf_daily, period_key, _v=9):
     rows = []
     for fund, meta in etf_map.items():
         bench = meta["benchmark"]
@@ -248,6 +248,8 @@ def build_vs_benchmark(px, rf_daily, period_key, _v=8):
         start, end = period_window(pair_px.index, period_key)
         f_ret_val = period_return_from_prices(pair_px.loc[:, fund], start, end)
         b_ret_val = period_return_from_prices(pair_px.loc[:, bench], start, end)
+        
+
 
 
         ex_ret_val = f_ret_val - b_ret_val if pd.notna(f_ret_val) and pd.notna(b_ret_val) else np.nan
@@ -282,7 +284,7 @@ def build_vs_benchmark(px, rf_daily, period_key, _v=8):
     return df
 
 @st.cache_data(ttl=1800)
-def build_vs_each_other(px, rf_daily, period_key):
+def build_vs_each_other(px, rf_daily, period_key,_v=9):
     rows = []
     for fund, meta in etf_map.items():
         if fund not in px.columns:
