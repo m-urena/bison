@@ -146,7 +146,7 @@ def get_dividend_yield(ticker):
         # Otherwise compute trailing 12-month yield from dividends / latest price
         divs = t.dividends
         if divs is None or divs.empty:
-            return np.nan
+            return 0
         if getattr(divs.index, "tz", None) is not None:
             divs.index = divs.index.tz_localize(None)
         cutoff = pd.Timestamp.today().normalize() - pd.Timedelta(days=365)
