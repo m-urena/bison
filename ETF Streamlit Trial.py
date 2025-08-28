@@ -54,7 +54,7 @@ etf_map = {
 @st.cache_data(ttl=3600)
 def load_prices(start):
     tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
-    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)["Adj Close"]#change to Close for price return not total
+    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)["Adj Close"]
     px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
     px = px[~px.index.duplicated(keep="last")].sort_index()
     return px
@@ -93,14 +93,15 @@ def max_drawdown(r):
     w = (1 + s).cumprod()
     return round(float((1 - w.div(w.cummax())).max()),4)
 
-def ann_cagr(r):
-    r = pd.Series(r).dropna().astype(float)
-    n = len(r)
-    if n < 2:
+def ann_cagr_from_prices(p):
+    s = pd.Series(p).dropna().astype(float)
+    if s.size < 2:
         return np.nan
-    gross = (1.0 + r).prod()
-    years = n / 252.0
-    return float(gross**(1.0/years) - 1.0)
+    years = (s.index[-1] - s.index[0]).days / 365.25
+    if years <= 0:
+        return np.nan
+    return float(s.iloc[-1] / s.iloc[0])**(1.0/years) - 1.0
+
 
 
 from functools import lru_cache
@@ -182,31 +183,27 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rets, rf_daily, _v=4):
+def build_vs_benchmark(px, rets, rf_daily, _v=5):
     rows = []
     for fund, meta in etf_map.items():
         bench = meta["benchmark"]
-        if fund not in rets.columns or bench not in rets.columns:
+        if fund not in px.columns or bench not in px.columns:
             continue
-        z = rets.loc[:, [fund, bench]].dropna()
-        if z.shape[0] < 60:
+        pair_px = px.loc[:, [fund, bench]].dropna()
+        if pair_px.shape[0] < 60:
             continue
-
+        f_ann = ann_cagr_from_prices(pair_px[fund])
+        b_ann = ann_cagr_from_prices(pair_px[bench])
+        ex_ann = f_ann - b_ann
+        z = rets.loc[pair_px.index, [fund, bench]].dropna()
         f = z.iloc[:, 0]
         b = z.iloc[:, 1]
-
-        f_ann = ann_cagr(f)
-        b_ann = ann_cagr(b)
-        ex_ann = f_ann - b_ann
-
         f_sort = sortino_ratio(f, rf_daily)
         b_sort = sortino_ratio(b, rf_daily)
         ex_sort = f_sort - b_sort if pd.notna(f_sort) and pd.notna(b_sort) else np.nan
-
         f_dd = max_drawdown(f)
         b_dd = max_drawdown(b)
-        ex_dd = b_dd - f_dd if pd.notna(f_dd) and pd.notna(b_dd) else np.nan  # positive = better
-
+        ex_dd = b_dd - f_dd if pd.notna(f_dd) and pd.notna(b_dd) else np.nan
         rows.append({
             "Fund": fund,
             "Benchmark": bench,
@@ -219,9 +216,8 @@ def build_vs_benchmark(px, rets, rf_daily, _v=4):
             "Excess Sortino": ex_sort,
             "Excess Max Drawdown": ex_dd,
             "Expense Ratio": get_expense_ratio(fund),
-            "Dividend Yield %": get_dividend_yield(fund),
+            "Dividend Yield %": get_dividend_yield(fund)
         })
-
     df = pd.DataFrame(rows)
     for c in ("Expense Ratio", "Dividend Yield %"):
         if c in df.columns:
@@ -229,28 +225,33 @@ def build_vs_benchmark(px, rets, rf_daily, _v=4):
     return df
 
 
+
 @st.cache_data(ttl=1800)
-def build_vs_each_other_simple(rets, rf_daily):
+def build_vs_each_other_simple(px, rets, rf_daily):
     rows = []
     for fund, meta in etf_map.items():
-        if fund not in rets.columns:
+        if fund not in px.columns:
             continue
-        r = rets.loc[:, [fund]].dropna().iloc[:, 0]
-        if r.shape[0] < 60:
+        s_px = px.loc[:, [fund]].dropna().iloc[:, 0]
+        if s_px.shape[0] < 60:
             continue
-
+        ann = ann_cagr_from_prices(s_px)
+        r = rets.loc[s_px.index, [fund]].dropna().iloc[:, 0]
+        sr = sortino_ratio(r, rf_daily)
+        mdd = max_drawdown(r)
         rows.append({
             "Fund": fund,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Total Return (annualized)": ann_cagr(r),
-            "Sortino": sortino_ratio(r, rf_daily),
-            "Max Drawdown": max_drawdown(r),
+            "Total Return (annualized)": ann,
+            "Sortino": sr,
+            "Max Drawdown": mdd,
             "Expense Ratio": get_expense_ratio(fund),
-            "Dividend Yield %": get_dividend_yield(fund),
+            "Dividend Yield %": get_dividend_yield(fund)
         })
     return pd.DataFrame(rows)
+
 
 def add_bench_points(df):
     er = pd.to_numeric(df.get("Excess Total Return (annualized)"), errors="coerce")
