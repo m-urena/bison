@@ -332,5 +332,5 @@ if asset_filter and "Asset Class" in df.columns:
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
 
-st.dataframe(style_table(df), use_container_width=True)
+#st.dataframe(style_table(df), use_container_width=True)
 
