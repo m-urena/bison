@@ -286,6 +286,10 @@ def style_table(df):
         pass
     return styler
 
+st.sidebar.title("Fund Dashboard")
+start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
+mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+
 prices = load_prices(start_date)
 rf_daily = load_rf_daily(start_date)
 common_idx = prices.index.intersection(rf_daily.index)
@@ -311,9 +315,7 @@ else:
     st.dataframe(style_table(df), use_container_width=True)
 
 
-st.sidebar.title("Fund Dashboard")
-start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+
 
 purpose_opts = sorted(df["Purpose"].dropna().unique()) if ("Purpose" in df.columns and not df.empty) else []
 asset_opts   = sorted(df["Asset Class"].dropna().unique()) if ("Asset Class" in df.columns and not df.empty) else []
