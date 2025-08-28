@@ -54,7 +54,7 @@ etf_map = {
 @st.cache_data(ttl=3600)
 def load_prices(start):
     tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
-    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=True, progress=False)["Adj Close"]#change to Adj Close auto_adjust=True for total return
+    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)["Adj Close"]#change to Adj Close auto_adjust=True for total return
     px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
     px = px[~px.index.duplicated(keep="last")].sort_index()
     return px
