@@ -217,21 +217,37 @@ def add_each_points(df):
     df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow"], default="Green")
     return df
 
-def style_table(df, view):
+def style_table(df):
     order_map = {"Green":0, "Yellow":1, "Red":2}
-    if view == "Vs Benchmark":
-        sort_cols = ["Color","Points","Excess Return (annualized)"]
-    else:
-        sort_cols = ["Color","Points","Return (annualized)"]
     if "Color" in df.columns:
-        df = df.assign(_c=df["Color"].map(order_map)).sort_values(["_c"]+sort_cols[1:], ascending=[True, False, False]).drop(columns=["_c"])
-    st_cols = [c for c in df.columns]
+        df = df.assign(_c=df["Color"].map(order_map)).sort_values(["_c","Points"], ascending=[True, False]).drop(columns=["_c"])
+
     def color_css(v):
         if v == "Green": return "background-color:#d6f5d6; color:#0a0a0a"
         if v == "Yellow": return "background-color:#fff5bf; color:#0a0a0a"
         if v == "Red": return "background-color:coral; color:#0a0a0a"
         return ""
-    styler = df.style.set_table_styles([{"selector":"th","props":[("position","sticky"),("top","0"),("background","#f5f5f5")]}]).set_properties(**{"border":"1px solid #ddd","font-size":"13px","font-family":"sans-serif"}).map(color_css, subset=pd.IndexSlice[:, ["Color"]])
+
+    pct_cols = [c for c in df.columns if c in [
+        "ETF Return (annualized)",
+        "Benchmark Return (annualized)",
+        "Excess Return (annualized)",
+        "Return (annualized)",
+        "Max Drawdown",
+        "Excess Max Drawdown",
+    ]]
+    fmt = {}
+    for c in pct_cols:
+        fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+    if "Expense Ratio" in df.columns:
+        fmt["Expense Ratio"] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+    if "Dividend Yield %" in df.columns:
+        fmt["Dividend Yield %"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}%"
+    if "Sortino" in df.columns:
+        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    if "Excess Sortino" in df.columns:
+        fmt["Excess Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    styler = (df.style.map(color_css, subset=["Color"]).format(fmt))
     try:
         styler = styler.hide(axis="index")
     except:
