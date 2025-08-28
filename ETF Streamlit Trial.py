@@ -2,6 +2,7 @@ import numpy as np, pandas as pd, yfinance as yf
 from fredapi import Fred
 from yahooquery import Ticker as YQT
 import streamlit as st
+from datetime import date
 from functools import lru_cache
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
