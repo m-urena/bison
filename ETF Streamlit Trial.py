@@ -3,6 +3,7 @@ from fredapi import Fred
 from yahooquery import Ticker
 import streamlit as st
 from datetime import date
+from functools import lru_cache
 
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
@@ -103,9 +104,6 @@ def ann_cagr_from_prices(p):
     return float(s.iloc[-1] / s.iloc[0])**(1.0/years) - 1.0
 
 
-
-from functools import lru_cache
-
 @lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
     if ticker in ["NAGRX","DNLIX"]:
@@ -183,27 +181,28 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rets, rf_daily, _v=5):
+def build_vs_benchmark(px, rf_daily, _v=6):
     rows = []
     for fund, meta in etf_map.items():
         bench = meta["benchmark"]
         if fund not in px.columns or bench not in px.columns:
             continue
-        pair_px = px.loc[:, [fund, bench]].dropna()
+        pair_px = px[[fund, bench]].dropna()
         if pair_px.shape[0] < 60:
             continue
         f_ann = ann_cagr_from_prices(pair_px[fund])
         b_ann = ann_cagr_from_prices(pair_px[bench])
         ex_ann = f_ann - b_ann
-        z = rets.loc[pair_px.index, [fund, bench]].dropna()
-        f = z.iloc[:, 0]
-        b = z.iloc[:, 1]
-        f_sort = sortino_ratio(f, rf_daily)
-        b_sort = sortino_ratio(b, rf_daily)
+        f_ret = pair_px[fund].pct_change().dropna()
+        b_ret = pair_px[bench].pct_change().dropna()
+        rf_f = rf_daily.reindex(f_ret.index).fillna(0.0)
+        rf_b = rf_daily.reindex(b_ret.index).fillna(0.0)
+        f_sort = sortino_ratio(f_ret, rf_f)
+        b_sort = sortino_ratio(b_ret, rf_b)
         ex_sort = f_sort - b_sort if pd.notna(f_sort) and pd.notna(b_sort) else np.nan
-        f_dd = max_drawdown(f)
-        b_dd = max_drawdown(b)
-        ex_dd = b_dd - f_dd if pd.notna(f_dd) and pd.notna(b_dd) else np.nan
+        f_dd = max_drawdown(f_ret)
+        b_dd = max_drawdown(b_ret)
+        ex_dd = b_dd - f_dd if pd.notna(f_dd) and pd.notna(b_dd) else np.nan  # positive=better
         rows.append({
             "Fund": fund,
             "Benchmark": bench,
@@ -216,7 +215,7 @@ def build_vs_benchmark(px, rets, rf_daily, _v=5):
             "Excess Sortino": ex_sort,
             "Excess Max Drawdown": ex_dd,
             "Expense Ratio": get_expense_ratio(fund),
-            "Dividend Yield %": get_dividend_yield(fund)
+            "Dividend Yield %": get_dividend_yield(fund),
         })
     df = pd.DataFrame(rows)
     for c in ("Expense Ratio", "Dividend Yield %"):
@@ -225,30 +224,32 @@ def build_vs_benchmark(px, rets, rf_daily, _v=5):
     return df
 
 
-
 @st.cache_data(ttl=1800)
-def build_vs_each_other_simple(px, rets, rf_daily):
+def build_vs_each_other_simple(px, rf_daily):
     rows = []
     for fund, meta in etf_map.items():
         if fund not in px.columns:
             continue
-        s_px = px.loc[:, [fund]].dropna().iloc[:, 0]
+
+        s_px = px[[fund]].dropna().iloc[:, 0]
         if s_px.shape[0] < 60:
             continue
+
         ann = ann_cagr_from_prices(s_px)
-        r = rets.loc[s_px.index, [fund]].dropna().iloc[:, 0]
-        sr = sortino_ratio(r, rf_daily)
-        mdd = max_drawdown(r)
+
+        r = s_px.pct_change().dropna()
+        rf = rf_daily.reindex(r.index).fillna(0.0)
+
         rows.append({
             "Fund": fund,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
             "Total Return (annualized)": ann,
-            "Sortino": sr,
-            "Max Drawdown": mdd,
+            "Sortino": sortino_ratio(r, rf),
+            "Max Drawdown": max_drawdown(r),
             "Expense Ratio": get_expense_ratio(fund),
-            "Dividend Yield %": get_dividend_yield(fund)
+            "Dividend Yield %": get_dividend_yield(fund),
         })
     return pd.DataFrame(rows)
 
@@ -315,13 +316,13 @@ mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
 prices = load_prices(start_date)
 rf_daily = load_rf_daily(start_date)
-common_idx = prices.index.intersection(rf_daily.index)
-prices = prices.loc[common_idx]
-rf_daily = rf_daily.loc[common_idx]
-rets = prices.pct_change().dropna()
+
+# Keep indices timezone-naive and aligned
+common_idx = prices.index.union(rf_daily.index)  # allow reindex later
+# No global rets needed
 
 if mode == "Vs Benchmark":
-    df = build_vs_benchmark(prices, rets, rf_daily).copy()
+    df = build_vs_benchmark(prices, rf_daily).copy()
     df = add_bench_points(df)
     cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy",
             "Fund Total Return (annualized)","Benchmark Total Return (annualized)",
@@ -330,12 +331,14 @@ if mode == "Vs Benchmark":
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Benchmark"
 else:
-    df = build_vs_each_other_simple(prices, rets, rf_daily).copy()
+    df = build_vs_each_other_simple(prices, rf_daily).copy()
     df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy","Total Return (annualized)","Sortino",
-            "Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Asset Class","Purpose","Strategy",
+            "Total Return (annualized)","Sortino","Max Drawdown",
+            "Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Each Other"
+
 
 purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
 asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
