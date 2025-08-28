@@ -91,7 +91,7 @@ def max_drawdown(r):
     if s.empty:
         return np.nan
     w = (1 + s).cumprod()
-    return round(float((1 - w.div(w.cummax())).max()),2)
+    return round(float((1 - w.div(w.cummax())).max()),4)
 
 def get_expense_ratio(ticker):
     if ticker in ["NAGRX","DNLIX"]:
@@ -104,7 +104,7 @@ def get_expense_ratio(ticker):
         if isinstance(prof, dict) and ticker in prof:
             d = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating")
             if d and isinstance(d, dict):
-                return round(d.get("annualReportExpenseRatio"),2)
+                return round(d.get("annualReportExpenseRatio"),4)
     except:
         return np.nan
     return np.nan
