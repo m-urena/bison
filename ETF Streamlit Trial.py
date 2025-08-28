@@ -330,7 +330,7 @@ if mode == "Vs Benchmark":
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Benchmark"
 else:
-    df = build_vs_each_other_simple(rets, rf_daily).copy()
+    df = build_vs_each_other_simple(prices, rets, rf_daily).copy()
     df = add_each_points(df)
     cols = ["Fund","Asset Class","Purpose","Strategy","Total Return (annualized)","Sortino",
             "Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
