@@ -89,7 +89,7 @@ def max_drawdown(r):
 def get_expense_ratio(ticker):
     if ticker in ["NAGRX","DNLIX"]:
         return 0.0199
-    if ticker in ["DFNDX"]
+    if ticker in ["DFNDX"]:
         return 0.0204
     try:
         from yahooquery import Ticker
