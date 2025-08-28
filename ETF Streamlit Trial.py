@@ -128,16 +128,13 @@ def period_window(index, period_key):
         return start, end
     return index[0], last
 
-
 def _to_1d_series(p):
     if isinstance(p, pd.Series):
         return pd.to_numeric(p.dropna(), errors="coerce")
-
     if isinstance(p, pd.DataFrame):
         if p.shape[1] != 1:
             raise ValueError(f"Expected 1 column, got {p.shape[1]}")
         return pd.to_numeric(p.iloc[:, 0].dropna(), errors="coerce")
-
     a = np.asarray(p)
     if a.ndim == 1:
         return pd.to_numeric(pd.Series(a).dropna(), errors="coerce")
@@ -147,7 +144,6 @@ def _to_1d_series(p):
 
 def period_return_from_prices(p, start, end):
     s = _to_1d_series(p)
-    # guard: ensure datetime index, sorted, unique
     if not isinstance(s.index, pd.DatetimeIndex):
         s.index = pd.to_datetime(s.index, utc=True, errors="coerce").tz_convert(None)
     s = s.dropna()
@@ -167,9 +163,19 @@ def _needed_start_for_period(period_key):
 def load_prices_for_period(period_key):
     start = _needed_start_for_period(period_key)
     tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
-    px = yf.download(tickers, start=start, end=date.today(), auto_adjust=True, progress=False)["Adj Close"]
+    raw = yf.download(tickers, start=start, end=date.today(), auto_adjust=True, progress=False)
+    if isinstance(raw.columns, pd.MultiIndex):
+        if "Adj Close" in raw.columns.levels[0]:
+            px = raw["Adj Close"].copy()
+        else:
+            px = raw["Close"].copy()
+    else:
+        col = "Adj Close" if "Adj Close" in raw.columns else "Close"
+        px = raw[[col]].copy()
+        px.columns = [tickers[0]]
     px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
     px = px[~px.index.duplicated(keep="last")].sort_index()
+    px = px.loc[:, ~px.columns.duplicated(keep="first")]
     return px
 
 @st.cache_data(ttl=3600)
@@ -185,7 +191,6 @@ def load_rf_daily_for_period(period_key):
     except:
         idx = pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")
         return pd.Series(0.0, index=idx, name="RF")
-
 
 @lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
@@ -326,7 +331,6 @@ def build_vs_benchmark(px, rf_daily, period_key, _v=10):
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
-
 @st.cache_data(ttl=1800)
 def build_vs_each_other(px, rf_daily, period_key,_v=9):
     rows = []
@@ -404,30 +408,22 @@ st.sidebar.title("Fund Dashboard")
 period_key = st.sidebar.selectbox("Period", ["YTD","1Y","3Y","5Y"], index=0)
 mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
-
 prices = load_prices_for_period(period_key)
 rf_daily = load_rf_daily_for_period(period_key)
 
-# build tables with your existing builders that already accept period windows internally
 if mode == "Vs Benchmark":
     df = build_vs_benchmark(prices, rf_daily, period_key).copy()
     df = add_bench_points(df)
-    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy",
-            "Fund Return","Benchmark Return","Excess Return",
-            "Excess Sortino","Excess Max Drawdown",
-            "Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Return","Benchmark Return","Excess Return","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Benchmark"
 else:
     df = build_vs_each_other(prices, rf_daily, period_key).copy()
     df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy",
-            "Total Return","Sortino","Max Drawdown",
-            "Expense Ratio","Dividend Yield %","Points","Color"]
+    cols = ["Fund","Asset Class","Purpose","Strategy","Return","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Each Other"
 
-# optional filters (unchanged)
 purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
 asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
 purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts)
@@ -444,4 +440,3 @@ if st.sidebar.button("Refresh data"):
 
 st.subheader(view_title)
 st.dataframe(style_table(df_view), use_container_width=True)
-
