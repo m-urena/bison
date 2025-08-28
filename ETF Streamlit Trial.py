@@ -63,7 +63,7 @@ def load_prices(start):
 def load_rf_daily(start):
     try:
         from fredapi import Fred
-        key = st.secrets.get("9a093bfd7b591c30fdc29d0d56e1c8f3", None)
+        key = "9a093bfd7b591c30fdc29d0d56e1c8f3" 
         fred = Fred(api_key=key)
         rf = fred.get_series("DGS1", start).astype(float)/100.0
         rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")).ffill()
@@ -272,7 +272,7 @@ if mode == "Vs Benchmark":
     cols = [c for c in cols if c in df.columns]
     df = df.loc[:, cols]
     st.subheader("Vs Benchmark")
-    st.dataframe(style_table(df, "Vs Benchmark"), use_container_width=True)
+    st.dataframe(style_table(df), use_container_width=True)
 else:
     df = build_vs_each_other_simple(rets, rf_daily).copy()
     df = add_each_points(df)
@@ -280,4 +280,4 @@ else:
     cols = [c for c in cols if c in df.columns]
     df = df.loc[:, cols]
     st.subheader("Vs Each Other")
-    st.dataframe(style_table(df, "Vs Each Other"), use_container_width=True)
+    st.dataframe(style_table(df), use_container_width=True)
