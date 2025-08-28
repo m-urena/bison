@@ -4,5 +4,3 @@ numpy
 yfinance
 yahooquery
 fredapi
-plotly
-scikit-learn
