@@ -110,28 +110,44 @@ def get_expense_ratio(ticker):
     return np.nan
 
 def get_dividend_yield(ticker):
-    #if ticker in["IGLD"]:
-        #return 15.68
     try:
         t = yf.Ticker(ticker)
+        # First, prefer Yahoo's trailing yield if present (already a fraction, e.g. 0.1568)
+        try:
+            info = t.info or {}
+        except Exception:
+            info = {}
+        y = info.get("yield") or info.get("trailingAnnualDividendYield") or info.get("dividendYield")
+        if y is not None and pd.notna(y) and float(y) > 0:
+            return round(float(y) * 100, 2)
+        # Otherwise compute trailing 12-month yield from dividends / latest price
         divs = t.dividends
-        hist = t.history(period="12m")
-        price = (hist["Close"].dropna().iloc[-1] if not hist.empty else t.info.get("regularMarketPrice") or t.info.get("previousClose"))
-        if not price or pd.isna(price) or price == 0:
-            y = t.info.get("trailingAnnualDividendYield")
-            return round(float(y)*100,2) if y else np.nan
         if divs is None or divs.empty:
-            y = t.info.get("trailingAnnualDividendYield")
-            return round(float(y)*100,2) if y else np.nan
-        one_year_ago = pd.Timestamp.today() - pd.DateOffset(years=1)
-        last12 = divs[divs.index.tz_localize(None) >= one_year_ago] if getattr(divs.index, "tz", None) else divs[divs.index >= one_year_ago]
+            return np.nan
+        if getattr(divs.index, "tz", None) is not None:
+            divs.index = divs.index.tz_localize(None)
+        cutoff = pd.Timestamp.today().normalize() - pd.Timedelta(days=365)
+        last12 = divs[divs.index >= cutoff]
         if last12.empty:
-            y = t.info.get("trailingAnnualDividendYield")
-            return round(float(y)*100,2) if y else np.nan
-        total = last12.sum() if len(last12) < 4 else last12.tail(4).mean()*4
-        return round((float(total)/float(price))*100,2)
-    except:
+            return np.nan
+        price = None
+        fi = getattr(t, "fast_info", None)
+        if fi:
+            price = fi.get("last_price") or fi.get("previous_close")
+        if not price:
+            h = t.history(period="5d")
+            if not h.empty:
+                price = float(h["Close"].dropna().iloc[-1])
+        if not price:
+            price = info.get("regularMarketPrice") or info.get("previousClose")
+        if not price or pd.isna(price) or float(price) == 0.0:
+            return np.nan
+        total = float(last12.sum())
+        return round((total / float(price)) * 100, 2)
+
+    except Exception:
         return np.nan
+
 @st.cache_data(ttl=1800)
 def build_vs_benchmark(px, rets, rf_daily):
     rows = []
