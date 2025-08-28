@@ -51,16 +51,44 @@ etf_map = {
     "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"}
 }
 
+def nearest_on_or_after(idx, ts):
+    i = pd.DatetimeIndex(idx).searchsorted(ts, side="left")
+    return idx[i] if i < len(idx) else None
+
+def nearest_on_or_before(idx, ts):
+    i = pd.DatetimeIndex(idx).searchsorted(ts, side="right") - 1
+    return idx[i] if i >= 0 else None
+
+def window_for_period(index, period_key):
+    index = pd.DatetimeIndex(index).sort_values()
+    end = index[-1]
+    if period_key == "YTD":
+        start = pd.Timestamp(year=end.year, month=1, day=1)
+    elif period_key == "1Y":
+        start = end - pd.Timedelta(days=365)
+    elif period_key == "3Y":
+        start = end - pd.Timedelta(days=3*365)
+    elif period_key == "5Y":
+        start = end - pd.Timedelta(days=5*365)
+    else:
+        start = index[0]
+    s = nearest_on_or_after(index, start) or index[0]
+    e = nearest_on_or_before(index, end) or end
+    return s, e
+
 @st.cache_data(ttl=3600)
-def load_prices(start):
+def load_close_prices(period_key):
+    today = pd.Timestamp.today().normalize()
+    span = {"YTD": 400, "1Y": 450, "3Y": 3*370+30, "5Y": 5*370+30}.get(period_key, 5*370+30)
+    start = (today - pd.Timedelta(days=span)).date()
     tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
     raw = yf.download(tickers, start=start, end=date.today(), auto_adjust=False, progress=False)
     if isinstance(raw.columns, pd.MultiIndex):
-        px = raw["Adj Close"].copy()
+        px = raw["Close"].copy()
     else:
-        if "Adj Close" not in raw.columns:
-            raise KeyError("Adj Close not in yfinance response")
-        px = raw[["Adj Close"]].copy()
+        if "Close" not in raw.columns:
+            raise KeyError("Close not in yfinance response")
+        px = raw[["Close"]].copy()
         px.columns = [tickers[0]]
     px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
     px = px[~px.index.duplicated(keep="last")].sort_index()
@@ -68,129 +96,91 @@ def load_prices(start):
     return px
 
 @st.cache_data(ttl=3600)
-def load_rf_daily(start):
+def load_dividends_map(period_key):
+    today = pd.Timestamp.today().normalize()
+    span = {"YTD": 400, "1Y": 450, "3Y": 3*370+30, "5Y": 5*370+30}.get(period_key, 5*370+30)
+    start = (today - pd.Timedelta(days=span))
+    dmap = {}
+    for t in etf_map.keys():
+        try:
+            divs = yf.Ticker(t).dividends
+            if divs is None or divs.empty:
+                dmap[t] = pd.Series(dtype=float)
+                continue
+            if getattr(divs.index, "tz", None) is not None:
+                divs.index = divs.index.tz_localize(None)
+            divs = divs[divs.index >= start]
+            dmap[t] = pd.to_numeric(divs, errors="coerce").dropna()
+        except:
+            dmap[t] = pd.Series(dtype=float)
+    for b in set(m["benchmark"] for m in etf_map.values()):
+        if b in dmap:
+            continue
+        try:
+            divs = yf.Ticker(b).dividends
+            if divs is None or divs.empty:
+                dmap[b] = pd.Series(dtype=float)
+                continue
+            if getattr(divs.index, "tz", None) is not None:
+                divs.index = divs.index.tz_localize(None)
+            divs = divs[divs.index >= start]
+            dmap[b] = pd.to_numeric(divs, errors="coerce").dropna()
+        except:
+            dmap[b] = pd.Series(dtype=float)
+    return dmap
+
+def build_total_return_series(price_series, dividend_series):
+    s = pd.to_numeric(pd.Series(price_series).dropna(), errors="coerce").dropna()
+    d = pd.to_numeric(pd.Series(dividend_series).dropna(), errors="coerce") if dividend_series is not None else pd.Series(dtype=float)
+    d = d.reindex(s.index).fillna(0.0)
+    pr = s.pct_change().fillna(0.0)
+    add = (d / s.shift(1)).fillna(0.0)
+    tr = (1.0 + pr + add).cumprod()
+    tr.iloc[0] = 1.0
+    return tr
+
+def period_return_from_tr(tr, start, end):
+    tr = tr.loc[(tr.index >= start) & (tr.index <= end)]
+    if tr.size < 2:
+        return np.nan, None
+    days = (tr.index[-1] - tr.index[0]).days
+    total = float(tr.iloc[-1] / tr.iloc[0] - 1.0)
+    ann = float((tr.iloc[-1] / tr.iloc[0])**(365.25/days) - 1.0) if days >= 365 else total
+    r_daily = tr.pct_change().dropna()
+    return ann, r_daily
+
+@st.cache_data(ttl=3600)
+def load_rf_daily(period_key):
+    today = pd.Timestamp.today().normalize()
+    span = {"YTD": 400, "1Y": 450, "3Y": 3*370+30, "5Y": 5*370+30}.get(period_key, 5*370+30)
+    start = (today - pd.Timedelta(days=span)).date()
     try:
-        key = "9a093bfd7b591c30fdc29d0d56e1c8f3"
-        fred = Fred(api_key=key)
+        fred = Fred(api_key="9a093bfd7b591c30fdc29d0d56e1c8f3")
         rf = fred.get_series("DGS1", start).astype(float)/100.0
-        rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")).ffill()
+        rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=today, freq="B")).ffill()
         rf_daily = (1.0 + rf_df["RF"]).pow(1/252.0) - 1.0
         rf_daily.name = "RF"
         return rf_daily
     except:
-        idx = pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")
+        idx = pd.date_range(start=start, end=today, freq="B")
         return pd.Series(0.0, index=idx, name="RF")
 
-def sortino_ratio(series, rf_series_daily):
-    z = pd.concat([pd.Series(series).dropna(), pd.Series(rf_series_daily).dropna()], axis=1).dropna()
+def sortino_ratio(series_daily, rf_daily):
+    z = pd.concat([pd.Series(series_daily).dropna(), pd.Series(rf_daily)], axis=1).dropna()
     if z.empty:
         return np.nan
     ex = z.iloc[:,0] - z.iloc[:,1]
     dn = ex[ex < 0].std() * np.sqrt(252)
     if dn == 0 or np.isnan(dn):
         return np.nan
-    return round((ex.mean() * 252) / dn,2)
+    return round((ex.mean() * 252) / dn, 2)
 
-def max_drawdown(r):
-    s = pd.Series(r).dropna().astype(float)
-    if s.ndim != 1:
-        s = s.squeeze()
+def max_drawdown(series_daily):
+    s = pd.Series(series_daily).dropna().astype(float)
     if s.empty:
         return np.nan
     w = (1 + s).cumprod()
-    return round(float((1 - w.div(w.cummax())).max()),4)
-
-def nearest_on_or_before(idx, ts):
-    i = pd.DatetimeIndex(idx).searchsorted(ts, side="right") - 1
-    return idx[i] if i >= 0 else None
-
-def nearest_on_or_after(idx, ts):
-    i = pd.DatetimeIndex(idx).searchsorted(ts, side="left")
-    return idx[i] if i < len(idx) else None
-
-def month_end(dt):
-    return (pd.Timestamp(dt).normalize() + pd.offsets.MonthEnd(0))
-
-def period_window(index, period_key):
-    index = pd.DatetimeIndex(index).sort_values()
-    last = index[-1]
-    if period_key == "YTD":
-        start_ts = pd.Timestamp(year=last.year, month=1, day=1)
-        start = nearest_on_or_after(index, start_ts) or index[0]
-        end = nearest_on_or_before(index, last) or last
-        return start, end
-    if period_key in ("1Y","3Y","5Y"):
-        n_years = {"1Y":1, "3Y":3, "5Y":5}[period_key]
-        end_me = month_end(last)
-        start_me = month_end(pd.Timestamp(end_me) - pd.DateOffset(years=n_years))
-        start = nearest_on_or_before(index, start_me) or index[0]
-        end = nearest_on_or_before(index, end_me) or last
-        return start, end
-    return index[0], last
-
-def _to_1d_series(p):
-    if isinstance(p, pd.Series):
-        return pd.to_numeric(p.dropna(), errors="coerce")
-    if isinstance(p, pd.DataFrame):
-        if p.shape[1] != 1:
-            raise ValueError(f"Expected 1 column, got {p.shape[1]}")
-        return pd.to_numeric(p.iloc[:, 0].dropna(), errors="coerce")
-    a = np.asarray(p)
-    if a.ndim == 1:
-        return pd.to_numeric(pd.Series(a).dropna(), errors="coerce")
-    if a.ndim == 2 and a.shape[1] == 1:
-        return pd.to_numeric(pd.Series(a[:, 0]).dropna(), errors="coerce")
-    raise ValueError(f"Expected 1D input, got shape {a.shape}")
-
-def period_return_from_prices(p, start, end):
-    s = _to_1d_series(p)
-    if not isinstance(s.index, pd.DatetimeIndex):
-        s.index = pd.to_datetime(s.index, utc=True, errors="coerce").tz_convert(None)
-    s = s.dropna()
-    s = s[~s.index.duplicated(keep="last")].sort_index()
-    s = s.loc[(s.index >= start) & (s.index <= end)]
-    if s.size < 2:
-        return np.nan
-    yrs = (s.index[-1] - s.index[0]).days / 365.25
-    return float((s.iloc[-1] / s.iloc[0])**(1.0/yrs) - 1.0) if yrs >= 1.0 else float(s.iloc[-1] / s.iloc[0] - 1.0)
-
-def _needed_start_for_period(period_key):
-    today = pd.Timestamp.today().normalize()
-    years = {"YTD": 1, "1Y": 1, "3Y": 3, "5Y": 5}.get(period_key, 5)
-    return (today - pd.DateOffset(years=years+1)).date()
-
-@st.cache_data(ttl=3600)
-def load_prices_for_period(period_key):
-    start = _needed_start_for_period(period_key)
-    tickers = sorted(set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]))
-    raw = yf.download(tickers, start=start, end=date.today(), auto_adjust=True, progress=False)
-    if isinstance(raw.columns, pd.MultiIndex):
-        if "Adj Close" in raw.columns.levels[0]:
-            px = raw["Adj Close"].copy()
-        else:
-            px = raw["Close"].copy()
-    else:
-        col = "Adj Close" if "Adj Close" in raw.columns else "Close"
-        px = raw[[col]].copy()
-        px.columns = [tickers[0]]
-    px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
-    px = px[~px.index.duplicated(keep="last")].sort_index()
-    px = px.loc[:, ~px.columns.duplicated(keep="first")]
-    return px
-
-@st.cache_data(ttl=3600)
-def load_rf_daily_for_period(period_key):
-    start = _needed_start_for_period(period_key)
-    try:
-        fred = Fred(api_key="9a093bfd7b591c30fdc29d0d56e1c8f3")
-        rf = fred.get_series("DGS1", start).astype(float)/100.0
-        rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")).ffill()
-        rf_daily = (1.0 + rf_df["RF"]).pow(1/252.0) - 1.0
-        rf_daily.name = "RF"
-        return rf_daily
-    except:
-        idx = pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")
-        return pd.Series(0.0, index=idx, name="RF")
+    return round(float((1 - w.div(w.cummax())).max()), 4)
 
 @lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
@@ -204,17 +194,15 @@ def get_expense_ratio(ticker):
         prof = yq.fund_profile
         if isinstance(prof, dict) and ticker in prof:
             fees = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating") or {}
-            for k in ("annualReportExpenseRatio", "netExpRatio", "grossExpRatio", "expenseRatio"):
+            for k in ("annualReportExpenseRatio","netExpRatio","grossExpRatio","expenseRatio"):
                 if fees.get(k) is not None:
-                    v = fees[k]
-                    break
+                    v = fees[k]; break
         if v is None:
             sd = yq.summary_detail
             if isinstance(sd, dict) and ticker in sd:
-                for k in ("annualReportExpenseRatio", "expenseRatio"):
+                for k in ("annualReportExpenseRatio","expenseRatio"):
                     if sd[ticker].get(k) is not None:
-                        v = sd[ticker][k]
-                        break
+                        v = sd[ticker][k]; break
         if v is None:
             yi = yf.Ticker(ticker).info or {}
             v = yi.get("expenseRatio")
@@ -263,95 +251,77 @@ def get_dividend_yield(ticker):
     except Exception:
         return np.nan
 
-@st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rf_daily, period_key, _v=10):
+@st.cache_data(ttl=900)
+def build_vs_benchmark(period_key):
+    px = load_close_prices(period_key)
+    dmap = load_dividends_map(period_key)
+    rf_daily = load_rf_daily(period_key)
     rows = []
     for fund, meta in etf_map.items():
         bench = meta["benchmark"]
         if fund not in px.columns or bench not in px.columns:
             continue
-        if fund == bench:
-            s = px.loc[:, fund].dropna()
-            if s.shape[0] < 60:
-                continue
-            start, end = period_window(s.index, period_key)
-            f_ret_val = period_return_from_prices(s, start, end)
-            b_ret_val = f_ret_val
-            ex_ret_val = 0.0 if pd.notna(f_ret_val) else np.nan
-            r = s.loc[start:end].pct_change().dropna()
-            idx = r.index
-            rf = rf_daily.reindex(idx).fillna(0.0)
-            f_sort = sortino_ratio(r, rf)
-            b_sort = f_sort
-            ex_sort = 0.0 if pd.notna(f_sort) else np.nan
-            f_dd = max_drawdown(r)
-            b_dd = f_dd
-            ex_dd = 0.0 if pd.notna(f_dd) else np.nan
-        else:
-            sf = px.loc[:, fund].dropna()
-            sb = px.loc[:, bench].dropna()
-            pair_idx = sf.index.intersection(sb.index)
-            if pair_idx.size < 60:
-                continue
-            start, end = period_window(pair_idx, period_key)
-            f_ret_val = period_return_from_prices(sf, start, end)
-            b_ret_val = period_return_from_prices(sb, start, end)
-            ex_ret_val = (f_ret_val - b_ret_val) if pd.notna(f_ret_val) and pd.notna(b_ret_val) else np.nan
-            rf_idx = pd.date_range(start=start, end=end, freq="B")
-            rf = rf_daily.reindex(rf_idx).fillna(0.0)
-            fr = sf.loc[start:end].pct_change().dropna()
-            br = sb.loc[start:end].pct_change().dropna()
-            idx = fr.index.intersection(br.index).intersection(rf.index)
-            fr = fr.loc[idx]
-            br = br.loc[idx]
-            rf = rf.loc[idx]
-            f_sort = sortino_ratio(fr, rf)
-            b_sort = sortino_ratio(br, rf)
-            ex_sort = (f_sort - b_sort) if pd.notna(f_sort) and pd.notna(b_sort) else np.nan
-            f_dd = max_drawdown(fr)
-            b_dd = max_drawdown(br)
-            ex_dd = (b_dd - f_dd) if pd.notna(f_dd) and pd.notna(b_dd) else np.nan
+        fp = px[fund].dropna()
+        bp = px[bench].dropna()
+        if fp.shape[0] < 60 or bp.shape[0] < 60:
+            continue
+        ftr = build_total_return_series(fp, dmap.get(fund, None))
+        btr = build_total_return_series(bp, dmap.get(bench, None))
+        idx = ftr.index.intersection(btr.index)
+        if idx.size < 60:
+            continue
+        start, end = window_for_period(idx, period_key)
+        f_ann, f_daily = period_return_from_tr(ftr.loc[idx], start, end)
+        b_ann, b_daily = period_return_from_tr(btr.loc[idx], start, end)
+        if f_daily is None or b_daily is None:
+            continue
+        rfi = rf_daily.reindex(f_daily.index).fillna(0.0)
+        fs = sortino_ratio(f_daily, rfi)
+        bs = sortino_ratio(b_daily, rfi)
+        fdd = max_drawdown(f_daily)
+        bdd = max_drawdown(b_daily)
         rows.append({
             "Fund": fund,
             "Benchmark": bench,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Fund Return": f_ret_val,
-            "Benchmark Return": b_ret_val,
-            "Excess Return": ex_ret_val,
-            "Excess Sortino": ex_sort,
-            "Excess Max Drawdown": ex_dd,
+            "Fund Return": f_ann,
+            "Benchmark Return": b_ann,
+            "Excess Return": (f_ann - b_ann) if pd.notna(f_ann) and pd.notna(b_ann) else np.nan,
+            "Excess Sortino": (fs - bs) if pd.notna(fs) and pd.notna(bs) else np.nan,
+            "Excess Max Drawdown": (bdd - fdd) if pd.notna(fdd) and pd.notna(bdd) else np.nan,
             "Expense Ratio": get_expense_ratio(fund),
             "Dividend Yield %": get_dividend_yield(fund)
         })
-    df = pd.DataFrame(rows)
-    for c in ("Expense Ratio", "Dividend Yield %"):
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df
+    return pd.DataFrame(rows)
 
-@st.cache_data(ttl=1800)
-def build_vs_each_other(px, rf_daily, period_key,_v=9):
+@st.cache_data(ttl=900)
+def build_vs_each_other(period_key):
+    px = load_close_prices(period_key)
+    dmap = load_dividends_map(period_key)
+    rf_daily = load_rf_daily(period_key)
     rows = []
     for fund, meta in etf_map.items():
         if fund not in px.columns:
             continue
-        s_px = px.loc[:, [fund]].dropna().iloc[:, 0]
-        if s_px.shape[0] < 60:
+        p = px[fund].dropna()
+        if p.shape[0] < 60:
             continue
-        start, end = period_window(s_px.index, period_key)
-        ret_val = period_return_from_prices(s_px, start, end)
-        r = s_px.loc[start:end].pct_change().dropna()
-        rf = rf_daily.reindex(r.index).fillna(0.0)
+        tr = build_total_return_series(p, dmap.get(fund, None))
+        start, end = window_for_period(tr.index, period_key)
+        ann, daily = period_return_from_tr(tr, start, end)
+        if daily is None:
+            continue
+        rfi = rf_daily.reindex(daily.index).fillna(0.0)
         rows.append({
             "Fund": fund,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Return": ret_val,
-            "Sortino": sortino_ratio(r, rf),
-            "Max Drawdown": max_drawdown(r),
+            "Return": ann,
+            "Sortino": sortino_ratio(daily, rfi),
+            "Max Drawdown": max_drawdown(daily),
             "Expense Ratio": get_expense_ratio(fund),
             "Dividend Yield %": get_dividend_yield(fund)
         })
@@ -408,17 +378,14 @@ st.sidebar.title("Fund Dashboard")
 period_key = st.sidebar.selectbox("Period", ["YTD","1Y","3Y","5Y"], index=0)
 mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
-prices = load_prices_for_period(period_key)
-rf_daily = load_rf_daily_for_period(period_key)
-
 if mode == "Vs Benchmark":
-    df = build_vs_benchmark(prices, rf_daily, period_key).copy()
+    df = build_vs_benchmark(period_key).copy()
     df = add_bench_points(df)
     cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Return","Benchmark Return","Excess Return","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Benchmark"
 else:
-    df = build_vs_each_other(prices, rf_daily, period_key).copy()
+    df = build_vs_each_other(period_key).copy()
     df = add_each_points(df)
     cols = ["Fund","Asset Class","Purpose","Strategy","Return","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
