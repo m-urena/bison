@@ -172,7 +172,7 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rets, rf_daily, _v=2):  # bump _v to invalidate cache
+def build_vs_benchmark(px, rets, rf_daily, _v=3):  # bump _v to invalidate old cache
     rows = []
     for etf, meta in etf_map.items():
         bench = meta["benchmark"]
@@ -181,25 +181,32 @@ def build_vs_benchmark(px, rets, rf_daily, _v=2):  # bump _v to invalidate cache
         z = rets.loc[:, [etf, bench]].dropna()
         if z.shape[0] < 60:
             continue
-        e = z.iloc[:, 0]; b = z.iloc[:, 1]
+
+        e = z.iloc[:, 0]
+        b = z.iloc[:, 1]
+
         rows.append({
             "Fund": etf,
             "Benchmark": bench,
             "Asset Class": meta["asset_class"],
             "Purpose": meta["purpose"],
             "Strategy": meta["strategy"],
-            "Fund Total Return (annualized)": float(e.mean()*252),
-            "Benchmark Total Return (annualized)": float(b.mean()*252),
-            "Excess Total Return (annualized)": float((e-b).mean()*252),
+            "Fund Total Return (annualized)": float(e.mean() * 252),
+            "Benchmark Total Return (annualized)": float(b.mean() * 252),
+            "Excess Total Return (annualized)": float((e - b).mean() * 252),
             "Excess Sortino": sortino_ratio(e, rf_daily) - sortino_ratio(b, rf_daily),
             "Excess Max Drawdown": max_drawdown(b) - max_drawdown(e),  # positive = better
-            "Expense Ratio": get_expense_ratio(etf),
+            "Expense Ratio": get_expense_ratio(etf),                   # <-- same logic as Vs Each Other
             "Dividend Yield %": get_dividend_yield(etf),
         })
+
     df = pd.DataFrame(rows)
-    for c in ["Expense Ratio", "Dividend Yield %"]:
+
+    # Force numeric so Streamlit doesn't show "None" and styling formats as %
+    for c in ("Expense Ratio", "Dividend Yield %"):
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
+
     return df
 
 
@@ -320,15 +327,12 @@ asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in d
 
 purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts)
 asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts)
-fund_search    = st.sidebar.text_input("Search Fund (optional)").strip()
 
 df_view = df.copy()
 if purpose_filter:  # only filter if user selected
     df_view = df_view[df_view["Purpose"].isin(purpose_filter)]
 if asset_filter:
     df_view = df_view[df_view["Asset Class"].isin(asset_filter)]
-if fund_search:
-    df_view = df_view[df_view["Fund"].str.contains(fund_search, case=False, na=False)]
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
