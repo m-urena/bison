@@ -8,25 +8,25 @@ from functools import lru_cache
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
 etf_map = {
-    "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income",       "strategy": "Foreign"},
-    "QQQ":   {"benchmark": "QQQ",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "DNLIX": {"benchmark": "SPY",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Hedged"},
-    "AVUV":  {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Small Cap"},
-    "GRID":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "XMMO":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "PAVE":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "OVF":   {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Foreign"},
-    "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
-    "OVLH":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "DGRW":  {"benchmark": "SCHD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
-    "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Mid Cap"},
-    "KHPI":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
+    "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Thematic"},
+    "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity",       "purpose": "Income",       "strategy": "Foreign"},
+    "QQQ":   {"benchmark": "QQQ",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Growth"},
+    "DNLIX": {"benchmark": "SPY",  "asset_class": "Alts",         "purpose": "Preservation", "strategy": "Hedged"},
+    "AVUV":  {"benchmark": "IJR",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Small Cap"},
+    "GRID":  {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Thematic"},
+    "XMMO":  {"benchmark": "IJH",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Growth"},
+    "PAVE":  {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Thematic"},
+    "OVF":   {"benchmark": "ACWX", "asset_class": "Equity",       "purpose": "Preservation", "strategy": "Foreign"},
+    "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity",       "purpose": "Income",       "strategy": "Dividend"},
+    "OVLH":  {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Preservation", "strategy": "Hedged"},
+    "DGRW":  {"benchmark": "SCHD", "asset_class": "Equity",       "purpose": "Income",       "strategy": "Dividend"},
+    "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Mid Cap"},
+    "KHPI":  {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Preservation", "strategy": "Hedged"},
     "IEF":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "ICSH":  {"benchmark": "BIL","asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
+    "ICSH":  {"benchmark": "BIL",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
     "CGSM":  {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Municipal"},
     "SHYD":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
-    "BIL":   {"benchmark": "BIL","asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
+    "BIL":   {"benchmark": "BIL",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
     "ESIIX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
     "SHY":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
     "OVB":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Core Bond"},
@@ -34,21 +34,21 @@ etf_map = {
     "CLOB":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
     "HYMB":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
     "MBSF":  {"benchmark": "MBB",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
-    "IAU":   {"benchmark": "GLD",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
-    "IGLD":  {"benchmark": "GLD",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
+    "IAU":   {"benchmark": "GLD",  "asset_class": "Alts",         "purpose": "Preservation", "strategy": "Commodity"},
+    "IGLD":  {"benchmark": "GLD",  "asset_class": "Alts",         "purpose": "Preservation", "strategy": "Commodity"},
     "IEI":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "NAGRX": {"benchmark": "AGG",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Core Bond"},
-    "IWF":   {"benchmark": "IWF",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "OVS":   {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Small Cap"},
-    "OVL":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Large Cap"},
+    "NAGRX": {"benchmark": "AGG",  "asset_class": "Alts",         "purpose": "Preservation", "strategy": "Core Bond"},
+    "IWF":   {"benchmark": "IWF",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Growth"},
+    "OVS":   {"benchmark": "IJR",  "asset_class": "Equity",       "purpose": "Preservation", "strategy": "Small Cap"},
+    "OVL":   {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Preservation", "strategy": "Large Cap"},
     "OVM":   {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Municipal"},
     "CLOI":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
-    "FIW":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "PEY":   {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
-    "GSIMX": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Foreign"},
-    "DFNDX": {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "PSFF":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Income", "strategy": "Hedged"},
-    "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
+    "FIW":   {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Thematic"},
+    "PEY":   {"benchmark": "IJH",  "asset_class": "Equity",       "purpose": "Income",       "strategy": "Dividend"},
+    "GSIMX": {"benchmark": "ACWX", "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Foreign"},
+    "DFNDX": {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Preservation", "strategy": "Hedged"},
+    "PSFF":  {"benchmark": "SPY",  "asset_class": "Equity",       "purpose": "Income",       "strategy": "Hedged"},
+    "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"}
 }
 
 @st.cache_data(ttl=3600)
@@ -100,16 +100,43 @@ def max_drawdown(r):
     w = (1 + s).cumprod()
     return round(float((1 - w.div(w.cummax())).max()),4)
 
-def period_years(idx):
-    if len(idx) < 2:
-        return 0.0
-    return (idx[-1] - idx[0]).days / 365.25
+def nearest_on_or_before(idx, ts):
+    i = idx.searchsorted(ts, side="right") - 1
+    if i < 0:
+        return None
+    return idx[i]
 
-def return_value_from_prices(p):
+def month_end(dt):
+    return (pd.Timestamp(dt).normalize() + pd.offsets.MonthEnd(0)).to_pydatetime()
+
+def period_window(index, period_key):
+    index = pd.DatetimeIndex(index)
+    last = index[-1]
+    if period_key == "YTD":
+        start_ts = pd.Timestamp(datetime(last.year, 1, 1))
+        start = nearest_on_or_before(index, start_ts)
+        if start is None:
+            start = index[0]
+        return start, last
+    if period_key in ("1Y","3Y","5Y"):
+        n_years = {"1Y":1,"3Y":3,"5Y":5}[period_key]
+        end_me = month_end(last)
+        start_me = month_end(pd.Timestamp(end_me) - pd.DateOffset(years=n_years))
+        start = nearest_on_or_before(index, pd.Timestamp(start_me))
+        end = nearest_on_or_before(index, pd.Timestamp(end_me))
+        if start is None:
+            start = index[0]
+        if end is None:
+            end = last
+        return start, end
+    return index[0], last
+
+def period_return_from_prices(p, start, end):
     s = pd.Series(p).dropna().astype(float)
+    s = s.loc[(s.index>=start) & (s.index<=end)]
     if s.size < 2:
         return np.nan
-    yrs = period_years(s.index)
+    yrs = (s.index[-1] - s.index[0]).days / 365.25
     if yrs >= 1.0:
         return float((s.iloc[-1] / s.iloc[0])**(1.0/yrs) - 1.0)
     else:
@@ -187,7 +214,7 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rf_daily, _v=7):
+def build_vs_benchmark(px, rf_daily, period_key, _v=8):
     rows = []
     for fund, meta in etf_map.items():
         bench = meta["benchmark"]
@@ -196,11 +223,12 @@ def build_vs_benchmark(px, rf_daily, _v=7):
         pair_px = px[[fund, bench]].dropna()
         if pair_px.shape[0] < 60:
             continue
-        f_ret_val = return_value_from_prices(pair_px[fund])
-        b_ret_val = return_value_from_prices(pair_px[bench])
+        start, end = period_window(pair_px.index, period_key)
+        f_ret_val = period_return_from_prices(pair_px[fund], start, end)
+        b_ret_val = period_return_from_prices(pair_px[bench], start, end)
         ex_ret_val = f_ret_val - b_ret_val if pd.notna(f_ret_val) and pd.notna(b_ret_val) else np.nan
-        f_ret = pair_px[fund].pct_change().dropna()
-        b_ret = pair_px[bench].pct_change().dropna()
+        f_ret = pair_px[fund].loc[start:end].pct_change().dropna()
+        b_ret = pair_px[bench].loc[start:end].pct_change().dropna()
         rf_f = rf_daily.reindex(f_ret.index).fillna(0.0)
         rf_b = rf_daily.reindex(b_ret.index).fillna(0.0)
         f_sort = sortino_ratio(f_ret, rf_f)
@@ -230,7 +258,7 @@ def build_vs_benchmark(px, rf_daily, _v=7):
     return df
 
 @st.cache_data(ttl=1800)
-def build_vs_each_other_simple(px, rf_daily):
+def build_vs_each_other(px, rf_daily, period_key):
     rows = []
     for fund, meta in etf_map.items():
         if fund not in px.columns:
@@ -238,8 +266,9 @@ def build_vs_each_other_simple(px, rf_daily):
         s_px = px[[fund]].dropna().iloc[:, 0]
         if s_px.shape[0] < 60:
             continue
-        ret_val = return_value_from_prices(s_px)
-        r = s_px.pct_change().dropna()
+        start, end = period_window(s_px.index, period_key)
+        ret_val = period_return_from_prices(s_px, start, end)
+        r = s_px.loc[start:end].pct_change().dropna()
         rf = rf_daily.reindex(r.index).fillna(0.0)
         rows.append({
             "Fund": fund,
@@ -302,24 +331,25 @@ def style_table(df):
     return styler
 
 st.sidebar.title("Fund Dashboard")
-start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
+start_date = st.sidebar.date_input("Start Date", value=date(2015,1,1))
 mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+period_key = st.sidebar.selectbox("Period", ["YTD","1Y","3Y","5Y"], index=0)
 
 prices = load_prices(start_date)
 rf_daily = load_rf_daily(start_date)
 
 if mode == "Vs Benchmark":
-    df = build_vs_benchmark(prices, rf_daily).copy()
+    df = build_vs_benchmark(prices, rf_daily, period_key).copy()
     df = add_bench_points(df)
     cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Return","Benchmark Return","Excess Return","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
-    view_title = "Vs Benchmark"
+    view_title = f"Vs Benchmark • {period_key}"
 else:
-    df = build_vs_each_other_simple(prices, rf_daily).copy()
+    df = build_vs_each_other(prices, rf_daily, period_key).copy()
     df = add_each_points(df)
     cols = ["Fund","Asset Class","Purpose","Strategy","Return","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
-    view_title = "Vs Each Other"
+    view_title = f"Vs Each Other • {period_key}"
 
 purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
 asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
