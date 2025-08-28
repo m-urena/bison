@@ -1,7 +1,7 @@
 import numpy as np, pandas as pd, yfinance as yf
 from fredapi import Fred
 from yahooquery import Ticker
-import streamlit
+import streamlit as st
 from datetime import date
 
 
