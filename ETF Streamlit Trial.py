@@ -152,7 +152,7 @@ def get_dividend_yield(ticker):
         cutoff = pd.Timestamp.today().normalize() - pd.Timedelta(days=365)
         last12 = divs[divs.index >= cutoff]
         if last12.empty:
-            return np.nan
+            return 0
         price = None
         fi = getattr(t, "fast_info", None)
         if fi:
