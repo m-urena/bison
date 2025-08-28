@@ -290,19 +290,20 @@ st.sidebar.title("Fund Dashboard")
 start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
 mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
-purpose_opts = sorted(df["Purpose"].dropna().unique()) if not df.empty else []
-asset_opts = sorted(df["Asset Class"].dropna().unique()) if not df.empty else []
+purpose_opts = sorted(df["Purpose"].dropna().unique()) if ("Purpose" in df.columns and not df.empty) else []
+asset_opts   = sorted(df["Asset Class"].dropna().unique()) if ("Asset Class" in df.columns and not df.empty) else []
 
 purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts, default=[])
-asset_filter = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts, default=[])
-fund_search = st.sidebar.text_input("Search Fund (optional)").strip()
+asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts, default=[])
+fund_search    = st.sidebar.text_input("Search Fund (optional)").strip()
 
-if purpose_filter:
+if purpose_filter and "Purpose" in df.columns:
     df = df[df["Purpose"].isin(purpose_filter)]
-if asset_filter:
+if asset_filter and "Asset Class" in df.columns:
     df = df[df["Asset Class"].isin(asset_filter)]
-if fund_search:
+if fund_search and "Fund" in df.columns:
     df = df[df["Fund"].str.contains(fund_search, case=False, na=False)]
+
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
