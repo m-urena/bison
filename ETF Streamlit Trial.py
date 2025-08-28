@@ -316,15 +316,13 @@ if mode == "Vs Benchmark":
 else:
     df = build_vs_each_other_simple(rets, rf_daily).copy()
     df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy","Return (annualized)","Sortino",
+    cols = ["Fund","Asset Class","Purpose","Strategy","Total Return (annualized)","Sortino",
             "Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
     df = df.loc[:, [c for c in cols if c in df.columns]]
     view_title = "Vs Each Other"
 
-# Sidebar filters (all optional)
 purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
 asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
-
 purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts)
 asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts)
 
