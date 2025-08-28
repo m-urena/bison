@@ -290,6 +290,9 @@ st.sidebar.title("Fund Dashboard")
 start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
 mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
+if st.sidebar.button("Refresh data"):
+    st.cache_data.clear()
+
 prices = load_prices(start_date)
 rf_daily = load_rf_daily(start_date)
 common_idx = prices.index.intersection(rf_daily.index)
