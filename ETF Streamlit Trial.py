@@ -134,9 +134,27 @@ def period_window(index, period_key):
     return index[0], last
 
 
+def _to_1d_series(p):
+    if isinstance(p, pd.Series):
+        s = p
+    elif isinstance(p, pd.DataFrame):
+        if p.shape[1] == 1:
+            s = p.iloc[:, 0]
+        else:
+            s = p.squeeze()
+    else:
+        a = np.asarray(p)
+        if a.ndim == 1:
+            s = pd.Series(a)
+        elif a.ndim == 2 and a.shape[1] == 1:
+            s = pd.Series(a[:, 0])
+        else:
+            raise ValueError("Expected 1D series")
+    return pd.to_numeric(pd.Series(s).dropna(), errors="coerce")
+
 def period_return_from_prices(p, start, end):
-    s = pd.Series(p).dropna().astype(float)
-    s = s.loc[(s.index>=start) & (s.index<=end)]
+    s = _to_1d_series(p)
+    s = s.loc[(s.index >= start) & (s.index <= end)]
     if s.size < 2:
         return np.nan
     yrs = (s.index[-1] - s.index[0]).days / 365.25
@@ -144,6 +162,7 @@ def period_return_from_prices(p, start, end):
         return float((s.iloc[-1] / s.iloc[0])**(1.0/yrs) - 1.0)
     else:
         return float(s.iloc[-1] / s.iloc[0] - 1.0)
+
 
 @lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
@@ -227,11 +246,13 @@ def build_vs_benchmark(px, rf_daily, period_key, _v=8):
         if pair_px.shape[0] < 60:
             continue
         start, end = period_window(pair_px.index, period_key)
-        f_ret_val = period_return_from_prices(pair_px[fund], start, end)
-        b_ret_val = period_return_from_prices(pair_px[bench], start, end)
+        f_ret_val = period_return_from_prices(pair_px.loc[:, fund], start, end)
+        b_ret_val = period_return_from_prices(pair_px.loc[:, bench], start, end)
+
+
         ex_ret_val = f_ret_val - b_ret_val if pd.notna(f_ret_val) and pd.notna(b_ret_val) else np.nan
-        f_ret = pair_px[fund].loc[start:end].pct_change().dropna()
-        b_ret = pair_px[bench].loc[start:end].pct_change().dropna()
+        f_ret = pair_px.loc[start:end, fund].pct_change().dropna()
+        b_ret = pair_px.loc[start:end, bench].pct_change().dropna()
         rf_f = rf_daily.reindex(f_ret.index).fillna(0.0)
         rf_b = rf_daily.reindex(b_ret.index).fillna(0.0)
         f_sort = sortino_ratio(f_ret, rf_f)
@@ -266,7 +287,7 @@ def build_vs_each_other(px, rf_daily, period_key):
     for fund, meta in etf_map.items():
         if fund not in px.columns:
             continue
-        s_px = px[[fund]].dropna().iloc[:, 0]
+        s_px = px.loc[:, [fund]].dropna().iloc[:, 0]
         if s_px.shape[0] < 60:
             continue
         start, end = period_window(s_px.index, period_key)
