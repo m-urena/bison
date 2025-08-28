@@ -71,7 +71,7 @@ def max_drawdown(r):
     return float((1 - w.div(w.cummax())).max())
 
 def get_expense_ratio(ticker):
-        if ticker in ["NAGRX","DNLIX","DFNDX"]:
+    if ticker in ["NAGRX","DNLIX","DFNDX"]:
         return 0.0199
     try:
         from yahooquery import Ticker
@@ -85,7 +85,7 @@ def get_expense_ratio(ticker):
     return np.nan
 
 def get_dividend_yield(ticker):
-        try:
+    try:
         t = yf.Ticker(ticker)
         divs = t.dividends
         hist = t.history(period="30d")
