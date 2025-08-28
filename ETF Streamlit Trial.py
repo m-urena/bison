@@ -1,11 +1,25 @@
 import numpy as np, pandas as pd, yfinance as yf
-from fredapi import Fred
-from yahooquery import Ticker as YQT
 import streamlit as st
 from datetime import date
 from functools import lru_cache
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
+
+try:
+    import mstarpy as ms
+    MSTARPY_AVAILABLE = True
+except Exception:
+    MSTARPY_AVAILABLE = False
+
+try:
+    from fredapi import Fred
+except Exception:
+    Fred = None
+
+try:
+    from yahooquery import Ticker as YQT
+except Exception:
+    YQT = None
 
 etf_map = {
     "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity",       "purpose": "Accumulation", "strategy": "Thematic"},
@@ -101,7 +115,7 @@ def load_dividends_map(period_key):
     span = {"YTD": 400, "1Y": 450, "3Y": 3*370+30, "5Y": 5*370+30}.get(period_key, 5*370+30)
     start = (today - pd.Timedelta(days=span))
     dmap = {}
-    for t in etf_map.keys():
+    for t in set(list(etf_map.keys()) + [m["benchmark"] for m in etf_map.values()]):
         try:
             divs = yf.Ticker(t).dividends
             if divs is None or divs.empty:
@@ -109,27 +123,12 @@ def load_dividends_map(period_key):
                 continue
             if getattr(divs.index, "tz", None) is not None:
                 divs.index = divs.index.tz_localize(None)
-            divs = divs[divs.index >= start]
-            dmap[t] = pd.to_numeric(divs, errors="coerce").dropna()
+            dmap[t] = pd.to_numeric(divs[divs.index >= start], errors="coerce").dropna()
         except:
             dmap[t] = pd.Series(dtype=float)
-    for b in set(m["benchmark"] for m in etf_map.values()):
-        if b in dmap:
-            continue
-        try:
-            divs = yf.Ticker(b).dividends
-            if divs is None or divs.empty:
-                dmap[b] = pd.Series(dtype=float)
-                continue
-            if getattr(divs.index, "tz", None) is not None:
-                divs.index = divs.index.tz_localize(None)
-            divs = divs[divs.index >= start]
-            dmap[b] = pd.to_numeric(divs, errors="coerce").dropna()
-        except:
-            dmap[b] = pd.Series(dtype=float)
     return dmap
 
-def build_total_return_series(price_series, dividend_series):
+def build_total_return_series_from_yahoo(price_series, dividend_series):
     s = pd.to_numeric(pd.Series(price_series).dropna(), errors="coerce").dropna()
     d = pd.to_numeric(pd.Series(dividend_series).dropna(), errors="coerce") if dividend_series is not None else pd.Series(dtype=float)
     d = d.reindex(s.index).fillna(0.0)
@@ -139,7 +138,7 @@ def build_total_return_series(price_series, dividend_series):
     tr.iloc[0] = 1.0
     return tr
 
-def period_return_from_tr(tr, start, end):
+def period_return_and_daily(tr, start, end):
     tr = tr.loc[(tr.index >= start) & (tr.index <= end)]
     if tr.size < 2:
         return np.nan, None
@@ -155,13 +154,16 @@ def load_rf_daily(period_key):
     span = {"YTD": 400, "1Y": 450, "3Y": 3*370+30, "5Y": 5*370+30}.get(period_key, 5*370+30)
     start = (today - pd.Timedelta(days=span)).date()
     try:
-        fred = Fred(api_key="9a093bfd7b591c30fdc29d0d56e1c8f3")
+        if Fred is None:
+            raise RuntimeError("No fredapi")
+        fred_key = st.secrets.get("FRED_API_KEY", None)
+        fred = Fred(api_key=fred_key) if fred_key else Fred()
         rf = fred.get_series("DGS1", start).astype(float)/100.0
         rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=today, freq="B")).ffill()
         rf_daily = (1.0 + rf_df["RF"]).pow(1/252.0) - 1.0
         rf_daily.name = "RF"
         return rf_daily
-    except:
+    except Exception:
         idx = pd.date_range(start=start, end=today, freq="B")
         return pd.Series(0.0, index=idx, name="RF")
 
@@ -189,23 +191,28 @@ def get_expense_ratio(ticker):
     if ticker in ["DFNDX"]:
         return 0.0204
     try:
-        yq = YQT(ticker)
-        v = None
-        prof = yq.fund_profile
-        if isinstance(prof, dict) and ticker in prof:
-            fees = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating") or {}
-            for k in ("annualReportExpenseRatio","netExpRatio","grossExpRatio","expenseRatio"):
-                if fees.get(k) is not None:
-                    v = fees[k]; break
-        if v is None:
-            sd = yq.summary_detail
-            if isinstance(sd, dict) and ticker in sd:
-                for k in ("annualReportExpenseRatio","expenseRatio"):
-                    if sd[ticker].get(k) is not None:
-                        v = sd[ticker][k]; break
-        if v is None:
-            yi = yf.Ticker(ticker).info or {}
-            v = yi.get("expenseRatio")
+        if YQT is not None:
+            yq = YQT(ticker)
+            v = None
+            prof = yq.fund_profile
+            if isinstance(prof, dict) and ticker in prof:
+                fees = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating") or {}
+                for k in ("annualReportExpenseRatio","netExpRatio","grossExpRatio","expenseRatio"):
+                    if fees.get(k) is not None:
+                        v = fees[k]; break
+            if v is None:
+                sd = yq.summary_detail
+                if isinstance(sd, dict) and ticker in sd:
+                    for k in ("annualReportExpenseRatio","expenseRatio"):
+                        if sd[ticker].get(k) is not None:
+                            v = sd[ticker][k]; break
+            if v is not None:
+                v = float(v)
+                if v >= 0.05 or v > 5:
+                    v = v / 100.0
+                return round(v, 6)
+        yi = yf.Ticker(ticker).info or {}
+        v = yi.get("expenseRatio")
         if v is None:
             return np.nan
         v = float(v)
@@ -251,6 +258,70 @@ def get_dividend_yield(ticker):
     except Exception:
         return np.nan
 
+def get_mstar_total_return_series(ticker, period_key):
+    if not MSTARPY_AVAILABLE:
+        return None
+    try:
+        user = st.secrets.get("MSTAR_USERNAME", None)
+        pwd  = st.secrets.get("MSTAR_PASSWORD", None)
+        api  = st.secrets.get("MSTAR_API_KEY", None)
+        if user and pwd and hasattr(ms, "auth"):
+            try:
+                ms.auth.login(user, pwd)
+            except Exception:
+                pass
+        f = ms.Funds(ticker)
+        # Expect a DataFrame or list of dicts with date + total return index or daily total return %
+        # Try the most common accessors; fallback to None to trigger Yahoo TRI
+        df = None
+        for attr in ("nav", "performance", "returns", "total_return"):
+            if hasattr(f, attr):
+                try:
+                    out = getattr(f, attr)()
+                    if out is not None:
+                        df = pd.DataFrame(out)
+                        break
+                except Exception:
+                    continue
+        if df is None or df.empty:
+            return None
+        # Normalize
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.dropna(subset=["date"]).set_index("date").sort_index()
+        # We expect either a level/ index (TRI) or a daily total return % column
+        tri = None
+        if "totalReturn" in df.columns:
+            # If totalReturn appears cumulative index (e.g., 230.xx) normalize to base=1
+            s = pd.to_numeric(df["totalReturn"], errors="coerce").dropna()
+            if s.max() > 10:  # likely an index level rather than % daily
+                tri = (s / s.iloc[0]).rename(ticker)
+            else:
+                # percentage daily? convert to TRI
+                tri = (1.0 + s/100.0).cumprod().rename(ticker)
+        elif "tri" in df.columns:
+            s = pd.to_numeric(df["tri"], errors="coerce").dropna()
+            tri = (s / s.iloc[0]).rename(ticker)
+        elif "nav" in df.columns and "distribution" in df.columns:
+            px = pd.to_numeric(df["nav"], errors="coerce")
+            dv = pd.to_numeric(df["distribution"], errors="coerce")
+            tri = build_total_return_series_from_yahoo(px, dv).rename(ticker)
+        if tri is None or tri.empty:
+            return None
+        tri.index = pd.to_datetime(tri.index, utc=True, errors="coerce").tz_convert(None)
+        tri = tri[~tri.index.duplicated(keep="last")].sort_index()
+        return tri
+    except Exception:
+        return None
+
+def get_total_return_series(ticker, period_key, px=None, dmap=None):
+    tri = get_mstar_total_return_series(ticker, period_key)
+    if tri is not None and not tri.empty:
+        return tri
+    if px is None or dmap is None or ticker not in px.columns:
+        return None
+    return build_total_return_series_from_yahoo(px[ticker], dmap.get(ticker, None)).rename(ticker)
+
 @st.cache_data(ttl=900)
 def build_vs_benchmark(period_key):
     px = load_close_prices(period_key)
@@ -261,18 +332,16 @@ def build_vs_benchmark(period_key):
         bench = meta["benchmark"]
         if fund not in px.columns or bench not in px.columns:
             continue
-        fp = px[fund].dropna()
-        bp = px[bench].dropna()
-        if fp.shape[0] < 60 or bp.shape[0] < 60:
+        ftr = get_total_return_series(fund, period_key, px, dmap)
+        btr = get_total_return_series(bench, period_key, px, dmap)
+        if ftr is None or btr is None or ftr.empty or btr.empty:
             continue
-        ftr = build_total_return_series(fp, dmap.get(fund, None))
-        btr = build_total_return_series(bp, dmap.get(bench, None))
         idx = ftr.index.intersection(btr.index)
         if idx.size < 60:
             continue
         start, end = window_for_period(idx, period_key)
-        f_ann, f_daily = period_return_from_tr(ftr.loc[idx], start, end)
-        b_ann, b_daily = period_return_from_tr(btr.loc[idx], start, end)
+        f_ann, f_daily = period_return_and_daily(ftr.loc[idx], start, end)
+        b_ann, b_daily = period_return_and_daily(btr.loc[idx], start, end)
         if f_daily is None or b_daily is None:
             continue
         rfi = rf_daily.reindex(f_daily.index).fillna(0.0)
@@ -303,14 +372,11 @@ def build_vs_each_other(period_key):
     rf_daily = load_rf_daily(period_key)
     rows = []
     for fund, meta in etf_map.items():
-        if fund not in px.columns:
+        tri = get_total_return_series(fund, period_key, px, dmap)
+        if tri is None or tri.empty:
             continue
-        p = px[fund].dropna()
-        if p.shape[0] < 60:
-            continue
-        tr = build_total_return_series(p, dmap.get(fund, None))
-        start, end = window_for_period(tr.index, period_key)
-        ann, daily = period_return_from_tr(tr, start, end)
+        start, end = window_for_period(tri.index, period_key)
+        ann, daily = period_return_and_daily(tri, start, end)
         if daily is None:
             continue
         rfi = rf_daily.reindex(daily.index).fillna(0.0)
@@ -343,67 +409,4 @@ def add_bench_points(df):
 def add_each_points(df):
     p = quartile_points(df.get("Return")) + quartile_points(df.get("Sortino")) + quartile_points(df.get("Dividend Yield %"))
     df["Points"] = p.astype(int)
-    df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow"], default="Green")
-    return df
-
-def style_table(df):
-    order_map = {"Green":0, "Yellow":1, "Red":2}
-    if "Color" in df.columns:
-        df = df.assign(_c=df["Color"].map(order_map)).sort_values(["_c","Points"], ascending=[True, False]).drop(columns=["_c"])
-    def color_css(v):
-        if v == "Green": return "background-color:#d6f5d6; color:#0a0a0a"
-        if v == "Yellow": return "background-color:#fff5bf; color:#0a0a0a"
-        if v == "Red": return "background-color:coral; color:#0a0a0a"
-        return ""
-    pct_cols = [c for c in df.columns if c in ["Fund Return","Benchmark Return","Excess Return","Return","Max Drawdown","Excess Max Drawdown"]]
-    fmt = {}
-    for c in pct_cols:
-        fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-    if "Expense Ratio" in df.columns:
-        fmt["Expense Ratio"] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-    if "Dividend Yield %" in df.columns:
-        fmt["Dividend Yield %"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}%"
-    if "Sortino" in df.columns:
-        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
-    if "Excess Sortino" in df.columns:
-        fmt["Excess Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
-    styler = (df.style.map(color_css, subset=["Color"]).format(fmt))
-    try:
-        styler = styler.hide(axis="index")
-    except:
-        pass
-    return styler
-
-st.sidebar.title("Fund Dashboard")
-period_key = st.sidebar.selectbox("Period", ["YTD","1Y","3Y","5Y"], index=0)
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
-
-if mode == "Vs Benchmark":
-    df = build_vs_benchmark(period_key).copy()
-    df = add_bench_points(df)
-    cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Return","Benchmark Return","Excess Return","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
-    df = df.loc[:, [c for c in cols if c in df.columns]]
-    view_title = "Vs Benchmark"
-else:
-    df = build_vs_each_other(period_key).copy()
-    df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy","Return","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
-    df = df.loc[:, [c for c in cols if c in df.columns]]
-    view_title = "Vs Each Other"
-
-purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
-asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
-purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts)
-asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts)
-
-df_view = df.copy()
-if purpose_filter:
-    df_view = df_view[df_view["Purpose"].isin(purpose_filter)]
-if asset_filter:
-    df_view = df_view[df_view["Asset Class"].isin(asset_filter)]
-
-if st.sidebar.button("Refresh data"):
-    st.cache_data.clear()
-
-st.subheader(view_title)
-st.dataframe(style_table(df_view), use_container_width=True)
+    df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow
