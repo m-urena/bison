@@ -70,8 +70,41 @@ def max_drawdown(r):
     w = (1 + s).cumprod()
     return float((1 - w.div(w.cummax())).max())
 
-def get_expense_ratio(ticker): return np.nan
-def get_dividend_yield(ticker): return np.nan
+def get_expense_ratio(ticker):
+        if ticker in ["NAGRX","DNLIX","DFNDX"]:
+        return 0.0199
+    try:
+        from yahooquery import Ticker
+        prof = Ticker(ticker).fund_profile
+        if isinstance(prof, dict) and ticker in prof:
+            d = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating")
+            if d and isinstance(d, dict):
+                return d.get("annualReportExpenseRatio")
+    except:
+        return np.nan
+    return np.nan
+
+def get_dividend_yield(ticker):
+        try:
+        t = yf.Ticker(ticker)
+        divs = t.dividends
+        hist = t.history(period="30d")
+        price = (hist["Close"].dropna().iloc[-1] if not hist.empty else t.info.get("regularMarketPrice") or t.info.get("previousClose"))
+        if not price or pd.isna(price) or price == 0:
+            y = t.info.get("trailingAnnualDividendYield")
+            return round(float(y)*100,2) if y else np.nan
+        if divs is None or divs.empty:
+            y = t.info.get("trailingAnnualDividendYield")
+            return round(float(y)*100,2) if y else np.nan
+        one_year_ago = pd.Timestamp.today() - pd.DateOffset(years=1)
+        last12 = divs[divs.index.tz_localize(None) >= one_year_ago] if getattr(divs.index, "tz", None) else divs[divs.index >= one_year_ago]
+        if last12.empty:
+            y = t.info.get("trailingAnnualDividendYield")
+            return round(float(y)*100,2) if y else np.nan
+        total = last12.sum() if len(last12) < 4 else last12.tail(4).mean()*4
+        return round((float(total)/float(price))*100,2)
+    except:
+        return np.nan
 
 # ----------------------------
 # CALCULATIONS
