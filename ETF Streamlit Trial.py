@@ -115,7 +115,7 @@ def get_dividend_yield(ticker):
     try:
         t = yf.Ticker(ticker)
         divs = t.dividends
-        hist = t.history(period="3m")
+        hist = t.history(period="12m")
         price = (hist["Close"].dropna().iloc[-1] if not hist.empty else t.info.get("regularMarketPrice") or t.info.get("previousClose"))
         if not price or pd.isna(price) or price == 0:
             y = t.info.get("trailingAnnualDividendYield")
