@@ -236,33 +236,53 @@ def get_dividend_yield(ticker):
         return np.nan
 
 @st.cache_data(ttl=1800)
-def build_vs_benchmark(px, rf_daily, period_key, _v=9):
+def build_vs_benchmark(px, rf_daily, period_key, _v=10):
     rows = []
     for fund, meta in etf_map.items():
         bench = meta["benchmark"]
         if fund not in px.columns or bench not in px.columns:
             continue
-        pair_px = px[[fund, bench]].dropna()
-        if pair_px.shape[0] < 60:
-            continue
-        start, end = period_window(pair_px.index, period_key)
-        f_ret_val = period_return_from_prices(pair_px.loc[:, fund], start, end)
-        b_ret_val = period_return_from_prices(pair_px.loc[:, bench], start, end)
-        
-
-
-
-        ex_ret_val = f_ret_val - b_ret_val if pd.notna(f_ret_val) and pd.notna(b_ret_val) else np.nan
-        f_ret = pair_px.loc[start:end, fund].pct_change().dropna()
-        b_ret = pair_px.loc[start:end, bench].pct_change().dropna()
-        rf_f = rf_daily.reindex(f_ret.index).fillna(0.0)
-        rf_b = rf_daily.reindex(b_ret.index).fillna(0.0)
-        f_sort = sortino_ratio(f_ret, rf_f)
-        b_sort = sortino_ratio(b_ret, rf_b)
-        ex_sort = f_sort - b_sort if pd.notna(f_sort) and pd.notna(b_sort) else np.nan
-        f_dd = max_drawdown(f_ret)
-        b_dd = max_drawdown(b_ret)
-        ex_dd = b_dd - f_dd if pd.notna(f_dd) and pd.notna(b_dd) else np.nan
+        if fund == bench:
+            s = px.loc[:, fund].dropna()
+            if s.shape[0] < 60:
+                continue
+            start, end = period_window(s.index, period_key)
+            f_ret_val = period_return_from_prices(s, start, end)
+            b_ret_val = f_ret_val
+            ex_ret_val = 0.0 if pd.notna(f_ret_val) else np.nan
+            r = s.loc[start:end].pct_change().dropna()
+            idx = r.index
+            rf = rf_daily.reindex(idx).fillna(0.0)
+            f_sort = sortino_ratio(r, rf)
+            b_sort = f_sort
+            ex_sort = 0.0 if pd.notna(f_sort) else np.nan
+            f_dd = max_drawdown(r)
+            b_dd = f_dd
+            ex_dd = 0.0 if pd.notna(f_dd) else np.nan
+        else:
+            sf = px.loc[:, fund].dropna()
+            sb = px.loc[:, bench].dropna()
+            pair_idx = sf.index.intersection(sb.index)
+            if pair_idx.size < 60:
+                continue
+            start, end = period_window(pair_idx, period_key)
+            f_ret_val = period_return_from_prices(sf, start, end)
+            b_ret_val = period_return_from_prices(sb, start, end)
+            ex_ret_val = (f_ret_val - b_ret_val) if pd.notna(f_ret_val) and pd.notna(b_ret_val) else np.nan
+            rf_idx = pd.date_range(start=start, end=end, freq="B")
+            rf = rf_daily.reindex(rf_idx).fillna(0.0)
+            fr = sf.loc[start:end].pct_change().dropna()
+            br = sb.loc[start:end].pct_change().dropna()
+            idx = fr.index.intersection(br.index).intersection(rf.index)
+            fr = fr.loc[idx]
+            br = br.loc[idx]
+            rf = rf.loc[idx]
+            f_sort = sortino_ratio(fr, rf)
+            b_sort = sortino_ratio(br, rf)
+            ex_sort = (f_sort - b_sort) if pd.notna(f_sort) and pd.notna(b_sort) else np.nan
+            f_dd = max_drawdown(fr)
+            b_dd = max_drawdown(br)
+            ex_dd = (b_dd - f_dd) if pd.notna(f_dd) and pd.notna(b_dd) else np.nan
         rows.append({
             "Fund": fund,
             "Benchmark": bench,
@@ -282,6 +302,7 @@ def build_vs_benchmark(px, rf_daily, period_key, _v=9):
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
+
 
 @st.cache_data(ttl=1800)
 def build_vs_each_other(px, rf_daily, period_key,_v=9):
