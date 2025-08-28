@@ -56,9 +56,7 @@ def load_prices(start):
 def load_rf_daily(start):
     try:
         from fredapi import Fred
-        key = st.secrets.get("FRED_API_KEY", None)
-        if not key:
-            raise RuntimeError("no key")
+        key = st.secrets.get("9a093bfd7b591c30fdc29d0d56e1c8f3", None)
         fred = Fred(api_key=key)
         rf = fred.get_series("DGS1", start).astype(float)/100.0
         rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(pd.date_range(start=start, end=pd.Timestamp.today().normalize(), freq="B")).ffill()
@@ -89,8 +87,10 @@ def max_drawdown(r):
     return float((1 - w.div(w.cummax())).max())
 
 def get_expense_ratio(ticker):
-    if ticker in ["NAGRX","DNLIX","DFNDX"]:
+    if ticker in ["NAGRX","DNLIX"]:
         return 0.0199
+    if ticker in ["DFNDX"]
+        return 0.0204
     try:
         from yahooquery import Ticker
         prof = Ticker(ticker).fund_profile
