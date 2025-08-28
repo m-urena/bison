@@ -286,9 +286,6 @@ def style_table(df):
         pass
     return styler
 
-st.sidebar.title("Fund Dashboard")
-start_date = st.sidebar.date_input("Start Date", value=date(2020,1,1))
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 
 prices = load_prices(start_date)
 rf_daily = load_rf_daily(start_date)
@@ -301,36 +298,31 @@ if mode == "Vs Benchmark":
     df = build_vs_benchmark(prices, rets, rf_daily).copy()
     df = add_bench_points(df)
     cols = ["Fund","Benchmark","Asset Class","Purpose","Strategy","Fund Total Return (annualized)","Benchmark Total Return (annualized)","Excess Total Return (annualized)","Excess Sortino","Excess Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
-    cols = [c for c in cols if c in df.columns]
-    df = df.loc[:, cols]
-    st.subheader("Vs Benchmark")
-    st.dataframe(style_table(df), use_container_width=True)
+    df = df.loc[:, [c for c in cols if c in df.columns]]
+    view_title = "Vs Benchmark"
 else:
     df = build_vs_each_other_simple(rets, rf_daily).copy()
     df = add_each_points(df)
-    cols = ["Fund","Asset Class","Purpose","Strategy","Total Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
-    cols = [c for c in cols if c in df.columns]
-    df = df.loc[:, cols]
-    st.subheader("Vs Each Other")
-    st.dataframe(style_table(df), use_container_width=True)
+    cols = ["Fund","Asset Class","Purpose","Strategy","Return (annualized)","Sortino","Max Drawdown","Expense Ratio","Dividend Yield %","Points","Color"]
+    df = df.loc[:, [c for c in cols if c in df.columns]]
+    view_title = "Vs Each Other"
 
-
-
-
-purpose_opts = sorted(df["Purpose"].dropna().unique()) if ("Purpose" in df.columns and not df.empty) else []
-asset_opts   = sorted(df["Asset Class"].dropna().unique()) if ("Asset Class" in df.columns and not df.empty) else []
+purpose_opts = sorted(df["Purpose"].dropna().unique()) if "Purpose" in df.columns else []
+asset_opts   = sorted(df["Asset Class"].dropna().unique()) if "Asset Class" in df.columns else []
 
 purpose_filter = st.sidebar.multiselect("Filter by Purpose", options=purpose_opts, default=[])
 asset_filter   = st.sidebar.multiselect("Filter by Asset Class", options=asset_opts, default=[])
+fund_search    = st.sidebar.text_input("Search Fund (optional)").strip()
 
-if purpose_filter and "Purpose" in df.columns:
-    df = df[df["Purpose"].isin(purpose_filter)]
-if asset_filter and "Asset Class" in df.columns:
-    df = df[df["Asset Class"].isin(asset_filter)]
-
+df_view = df.copy()
+if purpose_filter and "Purpose" in df_view.columns:
+    df_view = df_view[df_view["Purpose"].isin(purpose_filter)]
+if asset_filter and "Asset Class" in df_view.columns:
+    df_view = df_view[df_view["Asset Class"].isin(asset_filter)]
+if fund_search and "Fund" in df_view.columns:
+    df_view = df_view[df_view["Fund"].str.contains(fund_search, case=False, na=False)]
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
 
-#st.dataframe(style_table(df), use_container_width=True)
-
+st.subheader(view_title)
