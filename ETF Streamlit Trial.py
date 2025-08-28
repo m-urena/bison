@@ -1,3 +1,10 @@
+import numpy as np, pandas as pd, yfinance as yf
+from fredapi import Fred
+from yahooquery import Ticker
+import streamlit
+from datetime import date
+
+
 st.set_page_config(page_title="ETF Traffic Lights", layout="wide")
 
 etf_map = {
