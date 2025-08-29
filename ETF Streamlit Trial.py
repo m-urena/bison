@@ -291,6 +291,7 @@ def build_vs_benchmark(period_key):
         df["Color"] = np.select([df["Points"]>=2, df["Points"]==1], ["Green","Yellow"], default="Red")
     return df
 
+
 @st.cache_data(ttl=1800)
 def build_vs_each_other(period_key):
     start, end = period_window(period_key)
