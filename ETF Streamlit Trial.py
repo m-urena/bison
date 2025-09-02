@@ -145,6 +145,27 @@ def max_drawdown(ret_series):
     dd = 1 - w.div(w.cummax())
     return float(dd.max())
 
+from yahooquery import Ticker as YQT
+
+def get_top_holdings(ticker, top_n=10):
+    try:
+        yq = YQT(ticker)
+        h = yq.fund_holding
+        if isinstance(h, pd.DataFrame) and not h.empty:
+            df = h.sort_values("holdingPercent", ascending=False).head(top_n)
+            return df["symbol"].tolist()
+    except Exception:
+        pass
+    try:
+        t = yf.Ticker(ticker)
+        h = getattr(t, "fund_holdings", None)
+        if h and "holdings" in h:
+            return [x["symbol"] for x in h["holdings"][:top_n]]
+    except Exception:
+        pass
+    return []
+
+
 @lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
     if ticker in ["NAGRX","DNLIX"]:
@@ -443,6 +464,18 @@ if custom_list:
         if corr_df is not None:
             st.subheader("Correlation Matrix of Returns")
             st.dataframe(corr_df.style.format("{:.2f}"), use_container_width=True)
+holdings_map = {}
+for t in custom_list:
+    holdings_map[t] = get_top_holdings(t, top_n=10)
+
+if holdings_map:
+    st.subheader("Top 10 Holdings")
+    max_len = max(len(v) for v in holdings_map.values())
+    rows = {f"Holding {i+1}": {fund: holdings_map[fund][i] if i < len(holdings_map[fund]) else "" 
+                                for fund in holdings_map}
+            for i in range(max_len)}
+    holdings_df = pd.DataFrame(rows).T
+    st.dataframe(holdings_df, use_container_width=True)
 
 
 if st.sidebar.button("Refresh data"):
