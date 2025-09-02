@@ -332,6 +332,7 @@ def build_custom_comparison(tickers, period_key):
     start, end = period_window(period_key)
     rf = rf_daily_series(start, end)
     rows = []
+    rets_map = {}
     for t in tickers:
         tot, r = build_pair_series(t, start, end)
         if pd.isna(tot) or r.empty:
@@ -350,6 +351,7 @@ def build_custom_comparison(tickers, period_key):
             "Expense Ratio": get_expense_ratio(t),
             "Dividend Yield %": get_dividend_yield(t)
         })
+        rets_map[t] = rr
     df = pd.DataFrame(rows)
     if not df.empty:
         def qpts(s):
@@ -357,7 +359,12 @@ def build_custom_comparison(tickers, period_key):
             return pd.cut(r, bins=[0,0.25,0.5,0.75,1.0000001], labels=[0,1,2,3], include_lowest=True).astype(float).fillna(0).astype(int)
         df["Points"] = qpts(df[f"Total Return ({period_key})"]) + qpts(df["Sortino"]) + qpts(df["Dividend Yield %"])
         df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow"], default="Green")
-    return df
+    # build correlation table if we have multiple tickers
+    corr_df = None
+    if len(rets_map) >= 2:
+        rets_df = pd.DataFrame(rets_map)
+        corr_df = rets_df.corr()
+    return df, corr_df
 
 
 
@@ -428,11 +435,15 @@ custom_list = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()
 
 if custom_list:
     st.subheader("Custom ETF Comparison")
-    custom_df = build_custom_comparison(custom_list, period_key)
+    custom_df, corr_df = build_custom_comparison(custom_list, period_key)
     if custom_df.empty:
         st.info("No valid data for entered tickers.")
     else:
         st.dataframe(style_table(custom_df), use_container_width=True)
+        if corr_df is not None:
+            st.subheader("Correlation Matrix of Returns")
+            st.dataframe(corr_df.style.format("{:.2f}"), use_container_width=True)
+
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
