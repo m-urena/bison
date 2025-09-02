@@ -350,7 +350,15 @@ def build_custom_comparison(tickers, period_key):
             "Expense Ratio": get_expense_ratio(t),
             "Dividend Yield %": get_dividend_yield(t)
         })
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        def qpts(s):
+            r = pd.to_numeric(s, errors="coerce").rank(pct=True, method="average")
+            return pd.cut(r, bins=[0,0.25,0.5,0.75,1.0000001], labels=[0,1,2,3], include_lowest=True).astype(float).fillna(0).astype(int)
+        df["Points"] = qpts(df[f"Total Return ({period_key})"]) + qpts(df["Sortino"]) + qpts(df["Dividend Yield %"])
+        df["Color"] = np.select([df["Points"]<=2, df["Points"]<=6], ["Red","Yellow"], default="Green")
+    return df
+
 
 
 
@@ -424,7 +432,7 @@ if custom_list:
     if custom_df.empty:
         st.info("No valid data for entered tickers.")
     else:
-        st.dataframe(custom_df, use_container_width=True)
+        st.dataframe(style_table(custom_df), use_container_width=True)
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
