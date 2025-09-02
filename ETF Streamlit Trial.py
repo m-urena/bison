@@ -415,7 +415,7 @@ if purpose_filter:
 if asset_filter:
     df_view = df_view[df_view["Asset Class"].isin(asset_filter)]
 
-custom_tickers = st.sidebar.text_input("Enter tickers (comma separated) for custom comparison")
+custom_tickers = st.sidebar.text_input("Enter tickers for comparison")
 custom_list = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
 
 if custom_list:
@@ -424,8 +424,7 @@ if custom_list:
     if custom_df.empty:
         st.info("No valid data for entered tickers.")
     else:
-        st.dataframe(style_table(custom_df), use_container_width=True)
-
+        st.dataframe(custom_df, use_container_width=True)
 
 if st.sidebar.button("Refresh data"):
     st.cache_data.clear()
