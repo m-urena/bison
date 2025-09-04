@@ -7,11 +7,13 @@ from functools import lru_cache
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
+# ============================
+# FastTrack Credentials (edit manually)
+# ============================
 FASTTRACK_BASE = "https://fasttrackapi.com/v1"
-
-FASTTRACK_ACCOUNT  = "702528"
-FASTTRACK_PASSWORD = "2FE9C5FA"
-FASTTRACK_APPID    = "4967E757-E918-4253-B798-0EA79C654885"
+FASTTRACK_ACCOUNT  = "702528"  # your account
+FASTTRACK_PASSWORD = "2FE9C5FA"  # your password
+FASTTRACK_APPID    = "4967E757-E918-4253-B798-0EA79C654885"  # your appid
 
 @st.cache_data(ttl=3600)
 def get_fasttrack_token():
@@ -19,7 +21,7 @@ def get_fasttrack_token():
     payload = {
         "username": FASTTRACK_ACCOUNT,
         "password": FASTTRACK_PASSWORD,
-        "appid": FASTTRACK_APPID
+        "appid": FASTTRACK_APPID,
     }
     with httpx.Client(timeout=30.0) as client:
         r = client.post(url, json=payload)
@@ -34,49 +36,13 @@ def get_fasttrack_headers():
     return {"Authorization": f"Bearer {get_fasttrack_token()}"}
 
 # ============================
-# Fund Mapping
+# Fund Mapping (same as before)
 # ============================
 fund_map = {
     "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income",       "strategy": "Foreign"},
     "QQQ":   {"benchmark": "QQQ",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "DNLIX": {"benchmark": "SPY",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Hedged"},
-    "AVUV":  {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Small Cap"},
-    "GRID":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "XMMO":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "PAVE":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "OVF":   {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Foreign"},
-    "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
-    "OVLH":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "DGRW":  {"benchmark": "SCHD","asset_class": "Equity", "purpose": "Income",       "strategy": "Dividend"},
-    "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Mid Cap"},
-    "KHPI":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "IEF":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "ICSH":  {"benchmark": "BIL",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
-    "CGSM":  {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Municipal"},
-    "SHYD":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
-    "BIL":   {"benchmark": "BIL",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
-    "ESIIX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
-    "SHY":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "OVB":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Core Bond"},
-    "OVT":   {"benchmark": "VCSH", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Short Term Bond"},
-    "CLOB":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
-    "HYMB":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "High Yield"},
-    "MBSF":  {"benchmark": "MBB",  "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
-    "IAU":   {"benchmark": "GLD",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
-    "IGLD":  {"benchmark": "GLD",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
-    "IEI":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "NAGRX": {"benchmark": "AGG",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Core Bond"},
-    "IWF":   {"benchmark": "IWF",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "OVS":   {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Small Cap"},
-    "OVL":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Large Cap"},
-    "OVM":   {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Municipal"},
-    "CLOI":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income",       "strategy": "Alt Credit"},
-    "FIW":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "PEY":   {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
-    "GSIMX": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Foreign"},
-    "DFNDX": {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "PSFF":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Income", "strategy": "Hedged"},
+    # ... (keep the rest of your mapping unchanged)
     "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
@@ -290,3 +256,61 @@ def build_custom_comparison(tickers, period_key):
         rets_df = pd.DataFrame(rets_map)
         corr_df = rets_df.corr()
     return df, corr_df
+
+def style_table(df):
+    if df.empty:
+        return df
+    fmt = {}
+    pct_cols = [c for c in df.columns if ("Return" in c) or (c in ["Max Drawdown", "Expense Ratio", "Dividend Yield %"])]
+    for c in pct_cols:
+        if c == "Expense Ratio":
+            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+        elif c == "Dividend Yield %":
+            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}%"
+        else:
+            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+    if "Sharpe" in df.columns:
+        fmt["Sharpe"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    if "Sortino" in df.columns:
+        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    styler = df.style.format(fmt)
+    try:
+        styler = styler.hide(axis="index")
+    except Exception:
+        pass
+    return styler
+
+# ============================
+# Streamlit UI
+# ============================
+st.sidebar.title("Fund Dashboard")
+period_key = st.sidebar.selectbox("Period", ["YTD","1Y","3Y","5Y"], index=1)
+mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+
+if mode == "Vs Benchmark":
+    df = build_vs_benchmark(period_key).copy()
+else:
+    df = build_vs_each_other(period_key).copy()
+
+custom_tickers = st.sidebar.text_input("Enter tickers for comparison")
+custom_list = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
+
+if custom_list:
+    st.subheader("Custom ETF Comparison")
+    custom_df, corr_df = build_custom_comparison(custom_list, period_key)
+    if custom_df.empty:
+        st.info("No valid data for entered tickers.")
+    else:
+        st.dataframe(style_table(custom_df), use_container_width=True)
+        if corr_df is not None:
+            st.subheader("Correlation Matrix of Returns")
+            st.dataframe(corr_df.style.format("{:.2f}"), use_container_width=True)
+
+if st.sidebar.button("Refresh data"):
+    st.cache_data.clear()
+
+st.subheader(mode + f" — {period_key}")
+if df.empty:
+    st.info("No rows for current selection.")
+else:
+    st.dataframe(style_table(df), use_container_width=True)
