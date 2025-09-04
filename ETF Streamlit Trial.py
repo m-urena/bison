@@ -1,4 +1,7 @@
-import httpx, numpy as np, pandas as pd, streamlit as st
+import httpx
+import numpy as np
+import pandas as pd
+import streamlit as st
 from datetime import datetime
 from functools import lru_cache
 
