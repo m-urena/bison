@@ -1,25 +1,38 @@
-import os, httpx, numpy as np, pandas as pd, streamlit as st
-from datetime import date, datetime
+import httpx, numpy as np, pandas as pd, streamlit as st
+from datetime import datetime
 from functools import lru_cache
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
 FASTTRACK_BASE = "https://fasttrackapi.com/v1"
 
-account = "702528"
-password = "2FE9C5FA"
-appid = "4967E757-E918-4253-B798-0EA79C654885"
-
-
-FASTTRACK_USERNAME = "702528"
+FASTTRACK_ACCOUNT  = "702528"
 FASTTRACK_PASSWORD = "2FE9C5FA"
-FASTTRACK_API_KEY  = "4967E757-E918-4253-B798-0EA79C654885"
+FASTTRACK_APPID    = "4967E757-E918-4253-B798-0EA79C654885"
+
+@st.cache_data(ttl=3600)
+def get_fasttrack_token():
+    url = f"{FASTTRACK_BASE}/login"
+    payload = {
+        "username": FASTTRACK_ACCOUNT,
+        "password": FASTTRACK_PASSWORD,
+        "appid": FASTTRACK_APPID
+    }
+    with httpx.Client(timeout=30.0) as client:
+        r = client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+    token = data.get("token")
+    if not token:
+        raise RuntimeError("Failed to retrieve FastTrack token")
+    return token
 
 def get_fasttrack_headers():
-    if not FASTTRACK_API_KEY:
-        raise RuntimeError("FASTTRACK_API_KEY not set")
-    return {"Authorization": f"Bearer {FASTTRACK_API_KEY}"}
+    return {"Authorization": f"Bearer {get_fasttrack_token()}"}
 
+# ============================
+# Fund Mapping
+# ============================
 fund_map = {
     "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income",       "strategy": "Foreign"},
@@ -64,6 +77,9 @@ fund_map = {
     "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
+# ============================
+# Helper Functions
+# ============================
 def period_window(key):
     today = pd.Timestamp.today().normalize()
     if key == "YTD":
@@ -271,9 +287,3 @@ def build_custom_comparison(tickers, period_key):
         rets_df = pd.DataFrame(rets_map)
         corr_df = rets_df.corr()
     return df, corr_df
-
-def style_table(df):
-    if df.empty:
-        return df
-    fmt = {}
-    pct_cols = [c for c in df.columns if ("Return" in c) or (c in ["Max Draw
