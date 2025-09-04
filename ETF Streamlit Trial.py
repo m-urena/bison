@@ -1,12 +1,24 @@
-import numpy as np, pandas as pd, yfinance as yf, streamlit as st
+import os, httpx, numpy as np, pandas as pd, streamlit as st
 from datetime import date, datetime
 from functools import lru_cache
-try:
-    import mstarpy as ms
-except Exception:
-    ms = None
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
+
+FASTTRACK_BASE = "https://fasttrackapi.com/v1"
+
+account = "702528"
+password = "2FE9C5FA"
+appid = "4967E757-E918-4253-B798-0EA79C654885"
+
+
+FASTTRACK_USERNAME = "702528"
+FASTTRACK_PASSWORD = "2FE9C5FA"
+FASTTRACK_API_KEY  = "4967E757-E918-4253-B798-0EA79C654885"
+
+def get_fasttrack_headers():
+    if not FASTTRACK_API_KEY:
+        raise RuntimeError("FASTTRACK_API_KEY not set")
+    return {"Authorization": f"Bearer {FASTTRACK_API_KEY}"}
 
 fund_map = {
     "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
@@ -67,45 +79,24 @@ def period_window(key):
     return start, today
 
 @st.cache_data(ttl=3600)
-def mstar_total_return_index(ticker, start, end):
-    if ms is None:
+def fasttrack_total_return_index(ticker, start, end):
+    url = f"{FASTTRACK_BASE}/series/totalreturn"
+    params = {"symbols": ticker, "start": start.strftime("%Y-%m-%d"), "end": end.strftime("%Y-%m-%d")}
+    with httpx.Client(timeout=30.0) as client:
+        r = client.get(url, headers=get_fasttrack_headers(), params=params)
+        r.raise_for_status()
+        data = r.json()
+    if not data or "series" not in data or ticker not in data["series"]:
         return None
-    try:
-        f = ms.Funds(ticker)
-        data = f.nav(start, end)
-        if not data or len(data) == 0:
-            return None
-        df = pd.DataFrame(data)
-        if "date" not in df or "totalReturn" not in df:
-            return None
-        s = pd.to_datetime(df["date"])
-        tri = pd.Series(df["totalReturn"].astype(float).values, index=s).sort_index()
-        tri.index = tri.index.tz_localize(None)
-        tri = tri[~tri.index.duplicated(keep="last")]
-        tri = tri.dropna()
-        if tri.empty:
-            return None
-        return tri
-    except Exception:
+    df = pd.DataFrame(data["series"][ticker])
+    if df.empty or "date" not in df or "value" not in df:
         return None
-
-@st.cache_data(ttl=3600)
-def yahoo_adj_close(tickers, start, end):
-    px = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
-    if isinstance(px.columns, pd.MultiIndex) and ("Adj Close" in px.columns.get_level_values(0)):
-        px = px["Adj Close"]
-    elif "Adj Close" in px.columns:
-        px = px["Adj Close"]
-    else:
-        if isinstance(px, pd.DataFrame) and "Close" in px.columns:
-            px = px["Close"]
-        elif isinstance(px, pd.Series):
-            px = px.to_frame()
-        else:
-            return pd.DataFrame(index=pd.DatetimeIndex([], name="Date"))
-    px.index = pd.to_datetime(px.index, utc=True, errors="coerce").tz_convert(None)
-    px = px[~px.index.duplicated(keep="last")].sort_index()
-    return px
+    s = pd.Series(df["value"].astype(float).values, index=pd.to_datetime(df["date"]))
+    s.index = s.index.tz_localize(None)
+    s = s[~s.index.duplicated(keep="last")].sort_index().dropna()
+    if s.empty:
+        return None
+    return s
 
 def series_period_return_from_index(index_series, start, end):
     s = pd.Series(index_series).dropna().astype(float)
@@ -119,13 +110,6 @@ def series_period_return_from_index(index_series, start, end):
     r = tri_norm.pct_change().dropna()
     total_ret = float(tri_norm.iloc[-1] - 1.0)
     return total_ret, r
-
-def tri_from_adj_close(p):
-    s = pd.Series(p).dropna().astype(float)
-    if s.empty:
-        return None
-    tri = (s / s.iloc[0]) * 100.0
-    return tri
 
 def sharpe_ratio(series, rf_daily):
     z = pd.concat([pd.Series(series).dropna(), pd.Series(rf_daily).dropna()], axis=1).dropna()
@@ -155,126 +139,43 @@ def max_drawdown(ret_series):
     dd = 1 - w.div(w.cummax())
     return float(dd.max())
 
-from yahooquery import Ticker as YQT
-
-def get_top_holdings(ticker, top_n=10):
-    try:
-        yq = YQT(ticker)
-        h = yq.fund_holding
-        if isinstance(h, pd.DataFrame) and not h.empty:
-            df = h.sort_values("holdingPercent", ascending=False).head(top_n)
-            return df["symbol"].tolist()
-    except Exception:
-        pass
-    try:
-        t = yf.Ticker(ticker)
-        h = getattr(t, "fund_holdings", None)
-        if h and "holdings" in h:
-            return [x["symbol"] for x in h["holdings"][:top_n]]
-    except Exception:
-        pass
-    return []
+@st.cache_data(ttl=3600)
+def fasttrack_metadata(ticker):
+    url = f"{FASTTRACK_BASE}/securities/metadata"
+    params = {"symbols": ticker}
+    with httpx.Client(timeout=30.0) as client:
+        r = client.get(url, headers=get_fasttrack_headers(), params=params)
+        r.raise_for_status()
+        data = r.json()
+    return data.get("metadata", {}).get(ticker, {})
 
 @lru_cache(maxsize=None)
 def get_expense_ratio(ticker):
-    if ticker in ["NAGRX","DNLIX"]:
-        return 0.0199
-    if ticker in ["DFNDX"]:
-        return 0.0204
-    try:
-        from yahooquery import Ticker as YQT
-        yq = YQT(ticker)
-        v = None
-        prof = yq.fund_profile
-        if isinstance(prof, dict) and ticker in prof:
-            fees = prof[ticker].get("feesExpensesInvestment") or prof[ticker].get("feesExpensesOperating") or {}
-            for k in ("annualReportExpenseRatio", "netExpRatio", "grossExpRatio", "expenseRatio"):
-                if fees.get(k) is not None:
-                    v = fees[k]
-                    break
-        if v is None:
-            sd = yq.summary_detail
-            if isinstance(sd, dict) and ticker in sd:
-                for k in ("annualReportExpenseRatio", "expenseRatio"):
-                    if sd[ticker].get(k) is not None:
-                        v = sd[ticker][k]
-                        break
-        if v is None:
-            yi = yf.Ticker(ticker).info or {}
-            v = yi.get("expenseRatio")
-        if v is None:
-            return np.nan
-        v = float(v)
-        if v >= 5:
-            v = v / 100.0
-        if v > 0.5:
-            v = v / 100.0
-        return float(v)
-    except Exception:
+    meta = fasttrack_metadata(ticker)
+    er = meta.get("expenseRatio")
+    if er is None:
         return np.nan
+    er = float(er)
+    if er >= 5:
+        er = er / 100.0
+    if er > 0.5:
+        er = er / 100.0
+    return float(er)
 
 def get_dividend_yield(ticker):
-    try:
-        t = yf.Ticker(ticker)
-        try:
-            info = t.info or {}
-        except Exception:
-            info = {}
-        y = info.get("yield") or info.get("trailingAnnualDividendYield") or info.get("dividendYield")
-        if y is not None and pd.notna(y) and float(y) > 0:
-            return float(y) * 100.0
-        divs = t.dividends
-        if divs is None or divs.empty:
-            return np.nan
-        if getattr(divs.index, "tz", None) is not None:
-            divs.index = divs.index.tz_localize(None)
-        cutoff = pd.Timestamp.today().normalize() - pd.Timedelta(days=365)
-        last12 = divs[divs.index >= cutoff]
-        if last12.empty:
-            return np.nan
-        price = None
-        fi = getattr(t, "fast_info", None)
-        if fi:
-            price = fi.get("last_price") or fi.get("previous_close")
-        if not price:
-            h = t.history(period="5d")
-            if not h.empty:
-                price = float(h["Close"].dropna().iloc[-1])
-        if not price:
-            price = info.get("regularMarketPrice") or info.get("previousClose")
-        if not price or pd.isna(price) or float(price) == 0.0:
-            return np.nan
-        total = float(last12.sum())
-        return (total / float(price)) * 100.0
-    except Exception:
+    meta = fasttrack_metadata(ticker)
+    y = meta.get("dividendYield")
+    if y is None:
         return np.nan
+    return float(y) * 100.0
 
 @st.cache_data(ttl=1800)
 def rf_daily_series(start, end):
-    try:
-        from fredapi import Fred
-        key = st.secrets.get("FRED_API_KEY", None)
-        if not key:
-            raise RuntimeError("no key")
-        fred = Fred(api_key=key)
-        rf = fred.get_series("DGS1", start).astype(float)/100.0
-        idx = pd.date_range(start=start, end=end, freq="B")
-        rf_df = pd.DataFrame(rf, columns=["RF"]).reindex(idx).ffill()
-        rf_daily = (1.0 + rf_df["RF"]).pow(1/252.0) - 1.0
-        rf_daily.name = "RF"
-        return rf_daily
-    except Exception:
-        idx = pd.date_range(start=start, end=end, freq="B")
-        return pd.Series(0.0, index=idx, name="RF")
+    idx = pd.date_range(start=start, end=end, freq="B")
+    return pd.Series(0.0, index=idx, name="RF")
 
 def build_pair_series(ticker, start, end):
-    tri = mstar_total_return_index(ticker, start, end)
-    if tri is None:
-        px = yahoo_adj_close([ticker], start, end)
-        if isinstance(px, pd.DataFrame) and ticker in px.columns:
-            tri = tri_from_adj_close(px[ticker])
-        elif isinstance(px, pd.Series):
-            tri = tri_from_adj_close(px)
+    tri = fasttrack_total_return_index(ticker, start, end)
     if tri is None or tri.empty:
         return np.nan, pd.Series(dtype=float)
     total, rets = series_period_return_from_index(tri, start, end)
@@ -374,69 +275,5 @@ def build_custom_comparison(tickers, period_key):
 def style_table(df):
     if df.empty:
         return df
-    def color_css(v):
-        if v == "Green": return "background-color:#d6f5d6; color:#0a0a0a"
-        if v == "Yellow": return "background-color:#fff5bf; color:#0a0a0a"
-        if v == "Red": return "background-color:coral; color:#0a0a0a"
-        return ""
     fmt = {}
-    pct_cols = [c for c in df.columns if ("Return" in c) or (c in ["Max Drawdown","Expense Ratio","Dividend Yield %"])]
-    for c in pct_cols:
-        if c == "Expense Ratio":
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-        elif c == "Dividend Yield %":
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}%"
-        else:
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-    if "Sharpe" in df.columns:
-        fmt["Sharpe"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
-    if "Sortino" in df.columns:
-        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
-    styler = df.style.format(fmt)
-    try:
-        styler = styler.hide(axis="index")
-    except Exception:
-        pass
-    return styler
-
-st.sidebar.title("Fund Dashboard")
-period_key = st.sidebar.selectbox("Period", ["YTD","1Y","3Y","5Y"], index=1)
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
-
-if mode == "Vs Benchmark":
-    df = build_vs_benchmark(period_key).copy()
-else:
-    df = build_vs_each_other(period_key).copy()
-
-custom_tickers = st.sidebar.text_input("Enter tickers for comparison")
-custom_list = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
-
-if custom_list:
-    st.subheader("Custom ETF Comparison")
-    custom_df, corr_df = build_custom_comparison(custom_list, period_key)
-    if custom_df.empty:
-        st.info("No valid data for entered tickers.")
-    else:
-        st.dataframe(style_table(custom_df), use_container_width=True)
-        if corr_df is not None:
-            st.subheader("Correlation Matrix of Returns")
-            st.dataframe(corr_df.style.format("{:.2f}"), use_container_width=True)
-
-    holdings_map = {t: get_top_holdings(t, top_n=10) for t in custom_list}
-    if holdings_map:
-        st.subheader("Top 10 Holdings")
-        max_len = max(len(v) for v in holdings_map.values())
-        rows = {f"Holding {i+1}": {fund: holdings_map[fund][i] if i < len(holdings_map[fund]) else "" 
-                                    for fund in holdings_map}
-                for i in range(max_len)}
-        holdings_df = pd.DataFrame(rows).T
-        st.dataframe(holdings_df, use_container_width=True)
-
-if st.sidebar.button("Refresh data"):
-    st.cache_data.clear()
-
-st.subheader(mode + f" — {period_key}")
-if df.empty:
-    st.info("No rows for current selection.")
-else:
-    st.dataframe(style_table(df), use_container_width=True)
+    pct_cols = [c for c in df.columns if ("Return" in c) or (c in ["Max Draw
