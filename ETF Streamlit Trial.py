@@ -163,5 +163,10 @@ if uploaded_file:
             st.info("No valid data for entered tickers.")
         else:
             st.dataframe(style_table(custom_df), use_container_width=True)
+
+    if st.sidebar.button("Reload Data"):
+        st.cache_data.clear()
+        st.experimental_rerun()
+
 else:
     st.info("Please upload your Excel file to get started.")
