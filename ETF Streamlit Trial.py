@@ -51,20 +51,34 @@ fund_map = {
 def style_table(df):
     if df.empty:
         return df
+    def fmt_percent(v, mult=1):
+        if pd.isna(v) or v=="No Data":
+            return ""
+        try:
+            v = str(v).replace("%","").strip()
+            v = float(v)
+            if v < 1:  # treat values like 0.0032 as fractions
+                v = v * 100
+            return f"{v*mult:.2f}%"
+        except Exception:
+            return v
     fmt = {}
-    pct_cols = [c for c in df.columns if any(x in c for x in ["Return","Drawdown","Expense","Yield"])]
-    for c in pct_cols:
-        fmt[c] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(str(v).replace('%','')):.2f}%"
+    for c in df.columns:
+        if "Return" in c or "Drawdown" in c or c in ["Dividend Yield %"]:
+            fmt[c] = lambda v, m=1: fmt_percent(v,m)
+        if c == "Expense Ratio":
+            fmt[c] = lambda v, m=1: fmt_percent(v,m)
     if "Sharpe" in df.columns:
-        fmt["Sharpe"] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(v):.2f}"
+        fmt["Sharpe"] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(v):.3f}"
     if "Sortino" in df.columns:
-        fmt["Sortino"] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(v):.2f}"
+        fmt["Sortino"] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(v):.3f}"
     styler = df.style.format(fmt)
     try:
         styler = styler.hide(axis="index")
     except Exception:
         pass
     return styler
+
 
 st.sidebar.title("Fund Dashboard")
 uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
