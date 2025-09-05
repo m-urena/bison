@@ -166,7 +166,7 @@ if uploaded_file:
 
     if st.sidebar.button("Reload Data"):
         st.cache_data.clear()
-        st.experimental_rerun()
+        st.rerun()
 
 else:
     st.info("Please upload your Excel file to get started.")
