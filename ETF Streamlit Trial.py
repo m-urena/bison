@@ -5,80 +5,81 @@ import streamlit as st
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
 fund_map = {
-    "IBIT":  {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "IQDY":  {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income", "strategy": "Foreign"},
-    "QQQ":   {"benchmark": "QQQ",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "DNLIX": {"benchmark": "SPY",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Hedged"},
-    "AVUV":  {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Small Cap"},
-    "GRID":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "XMMO":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "PAVE":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "OVF":   {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Foreign"},
-    "SCHD":  {"benchmark": "IWD",  "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
-    "OVLH":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "DGRW":  {"benchmark": "SCHD", "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
-    "FLQM":  {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Mid Cap"},
-    "KHPI":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "IEF":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "ICSH":  {"benchmark": "BIL",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
-    "CGSM":  {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Municipal"},
-    "SHYD":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
-    "BIL":   {"benchmark": "BIL",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
-    "ESIIX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
-    "SHY":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "OVB":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Core Bond"},
-    "OVT":   {"benchmark": "VCSH", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Short Term Bond"},
-    "CLOB":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Alt Credit"},
-    "HYMB":  {"benchmark": "HYD",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
-    "MBSF":  {"benchmark": "MBB",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Alt Credit"},
-    "IAU":   {"benchmark": "GLD",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
-    "IGLD":  {"benchmark": "GLD",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
-    "IEI":   {"benchmark": "AGG",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
-    "NAGRX": {"benchmark": "AGG",  "asset_class": "Alts", "purpose": "Preservation", "strategy": "Core Bond"},
-    "IWF":   {"benchmark": "IWF",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
-    "OVS":   {"benchmark": "IJR",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Small Cap"},
-    "OVL":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Large Cap"},
-    "OVM":   {"benchmark": "MUB",  "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Municipal"},
-    "CLOI":  {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Alt Credit"},
-    "FIW":   {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
-    "PEY":   {"benchmark": "IJH",  "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
+    "IBIT": {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
+    "IQDY": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income", "strategy": "Foreign"},
+    "QQQ": {"benchmark": "QQQ", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
+    "DNLIX": {"benchmark": "SPY", "asset_class": "Alts", "purpose": "Preservation", "strategy": "Hedged"},
+    "AVUV": {"benchmark": "IJR", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Small Cap"},
+    "GRID": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
+    "XMMO": {"benchmark": "IJH", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
+    "PAVE": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
+    "OVF": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Foreign"},
+    "SCHD": {"benchmark": "IWD", "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
+    "OVLH": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
+    "DGRW": {"benchmark": "SCHD", "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
+    "FLQM": {"benchmark": "IJH", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Mid Cap"},
+    "KHPI": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
+    "IEF": {"benchmark": "AGG", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
+    "ICSH": {"benchmark": "BIL", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
+    "CGSM": {"benchmark": "MUB", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Municipal"},
+    "SHYD": {"benchmark": "HYD", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
+    "BIL": {"benchmark": "BIL", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Cash"},
+    "ESIIX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
+    "SHY": {"benchmark": "AGG", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
+    "OVB": {"benchmark": "AGG", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Core Bond"},
+    "OVT": {"benchmark": "VCSH", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Short Term Bond"},
+    "CLOB": {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Alt Credit"},
+    "HYMB": {"benchmark": "HYD", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
+    "MBSF": {"benchmark": "MBB", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Alt Credit"},
+    "IAU": {"benchmark": "GLD", "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
+    "IGLD": {"benchmark": "GLD", "asset_class": "Alts", "purpose": "Preservation", "strategy": "Commodity"},
+    "IEI": {"benchmark": "AGG", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Treasury"},
+    "NAGRX": {"benchmark": "AGG", "asset_class": "Alts", "purpose": "Preservation", "strategy": "Core Bond"},
+    "IWF": {"benchmark": "IWF", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Growth"},
+    "OVS": {"benchmark": "IJR", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Small Cap"},
+    "OVL": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Large Cap"},
+    "OVM": {"benchmark": "MUB", "asset_class": "Fixed Income", "purpose": "Preservation", "strategy": "Municipal"},
+    "CLOI": {"benchmark": "BKLN", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "Alt Credit"},
+    "FIW": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
+    "PEY": {"benchmark": "IJH", "asset_class": "Equity", "purpose": "Income", "strategy": "Dividend"},
     "GSIMX": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Foreign"},
-    "DFNDX": {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
-    "PSFF":  {"benchmark": "SPY",  "asset_class": "Equity", "purpose": "Income", "strategy": "Hedged"},
-    "CPITX": {"benchmark": "HYG",  "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
+    "DFNDX": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
+    "PSFF": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Income", "strategy": "Hedged"},
+    "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
 def style_table(df):
     if df.empty:
         return df
-    def fmt_percent(v, mult=1):
-        if pd.isna(v) or v=="No Data":
+    def fmt_percent(v):
+        if pd.isna(v) or v == "No Data":
             return ""
         try:
-            v = str(v).replace("%","").strip()
-            v = float(v)
-            if v < 1:  # treat values like 0.0032 as fractions
-                v = v * 100
-            return f"{v*mult:.2f}%"
+            v = float(str(v).replace("%", "").strip())
+            if v < 1:
+                v *= 100
+            return f"{v:.2f}%"
+        except Exception:
+            return v
+    def fmt_ratio(v):
+        if pd.isna(v) or v == "No Data":
+            return ""
+        try:
+            return f"{float(v):.3f}"
         except Exception:
             return v
     fmt = {}
     for c in df.columns:
-        if "Return" in c or "Drawdown" in c or c in ["Dividend Yield %"]:
-            fmt[c] = lambda v, m=1: fmt_percent(v,m)
-        if c == "Expense Ratio":
-            fmt[c] = lambda v, m=1: fmt_percent(v,m)
-    if "Sharpe" in df.columns:
-        fmt["Sharpe"] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(v):.3f}"
-    if "Sortino" in df.columns:
-        fmt["Sortino"] = lambda v: "" if pd.isna(v) or v=="No Data" else f"{float(v):.3f}"
+        if "Return" in c or "Drawdown" in c or c in ["Dividend Yield %", "Expense Ratio"]:
+            fmt[c] = fmt_percent
+        if "Sharpe" in c or "Sortino" in c:
+            fmt[c] = fmt_ratio
     styler = df.style.format(fmt)
     try:
         styler = styler.hide(axis="index")
     except Exception:
         pass
     return styler
-
 
 st.sidebar.title("Fund Dashboard")
 uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
@@ -88,6 +89,13 @@ mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
 if uploaded_file:
     raw = pd.read_excel(uploaded_file)
     raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
+
+    sharpe_col = f"Sharpe {period_key.split()[0]}"
+    sortino_col = f"Sortino {period_key.split()[0]}"
+    if "Year" in period_key:
+        md_col = f"Max Drawdown {period_key.split()[0]}"
+    else:
+        md_col = f"Max Drawdown {period_key.split()[0]}"
 
     if mode == "Vs Benchmark":
         rows = []
@@ -115,9 +123,9 @@ if uploaded_file:
                 f"Fund Return ({period_key})": fund_val,
                 f"Benchmark Return ({period_key})": bench_val,
                 f"Excess Return ({period_key})": excess,
-                "Sharpe": row.get("Sharpe"),
-                "Sortino": row.get("Sortino"),
-                "Max Drawdown": row.get("Max Drawdown"),
+                "Sharpe": row.get(sharpe_col),
+                "Sortino": row.get(sortino_col),
+                "Max Drawdown": row.get(md_col),
                 "Expense Ratio": row.get("Expense Ratio"),
                 "Dividend Yield %": row.get("Yield")
             })
@@ -136,9 +144,9 @@ if uploaded_file:
                 "Purpose": meta.get("purpose",""),
                 "Strategy": meta.get("strategy",""),
                 f"Total Return ({period_key})": row[period_key],
-                "Sharpe": row.get("Sharpe"),
-                "Sortino": row.get("Sortino"),
-                "Max Drawdown": row.get("Max Drawdown"),
+                "Sharpe": row.get(sharpe_col),
+                "Sortino": row.get(sortino_col),
+                "Max Drawdown": row.get(md_col),
                 "Expense Ratio": row.get("Expense Ratio"),
                 "Dividend Yield %": row.get("Yield")
             })
