@@ -209,7 +209,7 @@ if uploaded_file:
     df = pd.DataFrame(rows)
 
     if not df.empty:
-       df = add_scores(df, period_key, mode)
+        df = add_scores(df, period_key, mode)
         df = df.sort_values("Score", ascending=False)
 
         purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
