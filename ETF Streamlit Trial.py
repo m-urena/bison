@@ -55,6 +55,18 @@ def load_data(uploaded_file):
     raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
     return raw
 
+def safe_number(x):
+    try:
+        if isinstance(x, str):
+            x = x.strip()
+            if x.endswith("%"):
+                return float(x.replace("%", "")) / 100.0
+            if x.lower() == "no data":
+                return np.nan
+        return float(x)
+    except:
+        return np.nan
+
 def style_table(df):
     if df.empty:
         return df
@@ -98,34 +110,39 @@ if uploaded_file:
         bench_row = raw.loc[raw["Ticker"] == bench].iloc[0]
 
         if mode == "Vs Benchmark":
-            rows.append({
-                "Fund": fund,
-                "Benchmark": bench,
-                "Asset Class": meta["asset_class"],
-                "Purpose": meta["purpose"],
-                "Strategy": meta["strategy"],
-                f"Fund Return ({period_key})": fund_row[period_key],
-                f"Benchmark Return ({period_key})": bench_row[period_key],
-                f"Excess Return ({period_key})": fund_row[period_key] - bench_row[period_key],
-                "Sharpe": fund_row.get(sharpe_col, np.nan),
-                "Sortino": fund_row.get(sortino_col, np.nan),
-                "Max Drawdown": fund_row.get(md_col, np.nan),
-                "Expense Ratio": fund_row["Expense Ratio"],
-                "Dividend Yield %": fund_row["Yield"]
-            })
-        else:
-            rows.append({
-                "Fund": fund,
-                "Asset Class": meta["asset_class"],
-                "Purpose": meta["purpose"],
-                "Strategy": meta["strategy"],
-                f"Return ({period_key})": fund_row[period_key],
-                "Sharpe": fund_row.get(sharpe_col, np.nan),
-                "Sortino": fund_row.get(sortino_col, np.nan),
-                "Max Drawdown": fund_row.get(md_col, np.nan),
-                "Expense Ratio": fund_row["Expense Ratio"],
-                "Dividend Yield %": fund_row["Yield"]
-            })
+        rows.append({
+            "Fund": fund,
+            "Benchmark": bench,
+            "Asset Class": meta["asset_class"],
+            "Purpose": meta["purpose"],
+            "Strategy": meta["strategy"],
+            f"Fund Return ({period_key})": safe_number(fund_row[period_key]),
+            f"Benchmark Return ({period_key})": safe_number(bench_row[period_key]),
+            f"Excess Return ({period_key})": (
+                safe_number(fund_row[period_key]) - safe_number(bench_row[period_key])
+                if pd.notna(safe_number(fund_row[period_key])) and pd.notna(safe_number(bench_row[period_key]))
+                else np.nan
+            ),
+            "Sharpe": safe_number(fund_row.get(sharpe_col, np.nan)),
+            "Sortino": safe_number(fund_row.get(sortino_col, np.nan)),
+            "Max Drawdown": safe_number(fund_row.get(md_col, np.nan)),
+            "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
+            "Dividend Yield %": safe_number(fund_row["Yield"])
+        })
+    else:
+        rows.append({
+            "Fund": fund,
+            "Asset Class": meta["asset_class"],
+            "Purpose": meta["purpose"],
+            "Strategy": meta["strategy"],
+            f"Return ({period_key})": safe_number(fund_row[period_key]),
+            "Sharpe": safe_number(fund_row.get(sharpe_col, np.nan)),
+            "Sortino": safe_number(fund_row.get(sortino_col, np.nan)),
+            "Max Drawdown": safe_number(fund_row.get(md_col, np.nan)),
+            "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
+            "Dividend Yield %": safe_number(fund_row["Yield"])
+        })
+
 
     df = pd.DataFrame(rows)
 
