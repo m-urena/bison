@@ -113,18 +113,23 @@ fund_map = {
 def add_scores(df, period_key, mode):
     df = df.copy()
 
-    if period_key in ["YTD", "1Y"]:
-        ex_col = "Excess Return (1Y)" if mode == "Vs Benchmark" else "Return (1Y)"
+    if period_key == "YTD":
+        ex_col = "YTD"
+        sh_col = "Sharpe 1Y"
+        so_col = "Sortino 1Y"
+        md_col = "Max Drawdown 1Y"
+    elif period_key == "1Y":
+        ex_col = "1 Year"
         sh_col = "Sharpe 1Y"
         so_col = "Sortino 1Y"
         md_col = "Max Drawdown 1Y"
     elif period_key == "3Y":
-        ex_col = "Excess Return (3Y)" if mode == "Vs Benchmark" else "Return (3Y)"
+        ex_col = "3 Year Annualized"
         sh_col = "Sharpe 3Y"
         so_col = "Sortino 3Y"
         md_col = "Max Drawdown 3Y"
     else:  # 5Y
-        ex_col = "Excess Return (5Y)" if mode == "Vs Benchmark" else "Return (5Y)"
+        ex_col = "5 Year Annualized"
         sh_col = "Sharpe 5Y"
         so_col = "Sortino 5Y"
         md_col = "Max Drawdown 5Y"
@@ -146,6 +151,7 @@ def add_scores(df, period_key, mode):
     )
 
     return df.drop(columns=["_ex", "_sh", "_so", "_md", "_er", "_dy"])
+
 
 
 # ---------------- UI ----------------
