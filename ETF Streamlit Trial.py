@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -45,128 +44,96 @@ fund_map = {
     "GSIMX": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Foreign"},
     "DFNDX": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Preservation", "strategy": "Hedged"},
     "PSFF": {"benchmark": "SPY", "asset_class": "Equity", "purpose": "Income", "strategy": "Hedged"},
-    "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
+    "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
 }
 
-def style_table(df):
-    if df.empty:
-        return df
-    def fmt_percent(v):
-        if pd.isna(v) or v == "No Data":
-            return ""
-        try:
-            v = float(str(v).replace("%", "").strip())
-            if v < 1:
-                v *= 100
-            return f"{v:.2f}%"
-        except Exception:
-            return v
-    def fmt_ratio(v):
-        if pd.isna(v) or v == "No Data":
-            return ""
-        try:
-            return f"{float(v):.3f}"
-        except Exception:
-            return v
-    fmt = {}
-    for c in df.columns:
-        if "Return" in c or "Drawdown" in c or c in ["Dividend Yield %", "Expense Ratio"]:
-            fmt[c] = fmt_percent
-        if "Sharpe" in c or "Sortino" in c:
-            fmt[c] = fmt_ratio
-    styler = df.style.format(fmt)
-    try:
-        styler = styler.hide(axis="index")
-    except Exception:
-        pass
-    return styler
+def get_metric_columns(period_key):
+    if period_key in ["YTD", "1 Year"]:
+        return "Sharpe 1Y", "Sortino 1Y", "Max Drawdown 1Y"
+    elif "3" in period_key:
+        return "Sharpe 3Y", "Sortino 3Y", "Max Drawdown 3Y"
+    elif "5" in period_key:
+        return "Sharpe 5Y", "Sortino 5Y", "Max Drawdown 5Y"
+    else:
+        return None, None, None
 
 st.sidebar.title("Fund Dashboard")
-uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
-period_key = st.sidebar.selectbox("Period", ["YTD","1 Year","3 Year Total","3 Year Annualized","5 Year Total","5 Year Annualized"], index=1)
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx", "xls"])
+period_key = st.sidebar.selectbox("Period", ["YTD", "1 Year", "3 Year Total", "3 Year Annualized", "5 Year Total", "5 Year Annualized"], index=1)
+mode = st.sidebar.selectbox("View", ["Vs Benchmark", "Vs Each Other"], index=0)
 
 if uploaded_file:
     raw = pd.read_excel(uploaded_file)
     raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
 
-    sharpe_col = f"Sharpe {period_key.split()[0]}"
-    sortino_col = f"Sortino {period_key.split()[0]}"
-    if "Year" in period_key:
-        md_col = f"Max Drawdown {period_key.split()[0]}"
-    else:
-        md_col = f"Max Drawdown {period_key.split()[0]}"
+    sharpe_col, sortino_col, md_col = get_metric_columns(period_key)
+
+    rows = []
 
     if mode == "Vs Benchmark":
-        rows = []
-        for _, row in raw.iterrows():
-            fund = str(row["Ticker"]).replace("M:","")
-            if fund not in fund_map:
+        for fund, meta in fund_map.items():
+            if fund not in raw["Ticker"].values:
                 continue
-            bench = fund_map[fund]["benchmark"]
-            bench_row = raw[raw["Ticker"] == bench]
-            if bench_row.empty:
+            row = raw.loc[raw["Ticker"] == fund].iloc[0]
+
+            bench = meta["benchmark"]
+            if bench not in raw["Ticker"].values:
                 continue
-            bench_row = bench_row.iloc[0]
-            try:
-                fund_val = float(str(row[period_key]).replace("%",""))
-                bench_val = float(str(bench_row[period_key]).replace("%",""))
-                excess = fund_val - bench_val
-            except Exception:
-                fund_val, bench_val, excess = np.nan, np.nan, np.nan
+            bench_row = raw.loc[raw["Ticker"] == bench].iloc[0]
+
+            fund_val = row.get(period_key, None)
+            bench_val = bench_row.get(period_key, None)
+
+            if pd.isna(fund_val) or pd.isna(bench_val):
+                continue
+
             rows.append({
                 "Fund": fund,
                 "Benchmark": bench,
-                "Asset Class": fund_map[fund]["asset_class"],
-                "Purpose": fund_map[fund]["purpose"],
-                "Strategy": fund_map[fund]["strategy"],
+                "Asset Class": meta["asset_class"],
+                "Purpose": meta["purpose"],
+                "Strategy": meta["strategy"],
                 f"Fund Return ({period_key})": fund_val,
                 f"Benchmark Return ({period_key})": bench_val,
-                f"Excess Return ({period_key})": excess,
-                "Sharpe": row.get(sharpe_col),
-                "Sortino": row.get(sortino_col),
-                "Max Drawdown": row.get(md_col),
-                "Expense Ratio": row.get("Expense Ratio"),
-                "Dividend Yield %": row.get("Yield")
+                f"Excess Return ({period_key})": fund_val - bench_val,
+                "Sharpe": row.get(sharpe_col, "No Data"),
+                "Sortino": row.get(sortino_col, "No Data"),
+                "Max Drawdown": row.get(md_col, "No Data"),
+                "Expense Ratio": row.get("Expense Ratio", None),
+                "Dividend Yield %": row.get("Yield", None)
             })
-        df = pd.DataFrame(rows)
-        st.subheader(f"Funds vs Benchmark — {period_key}")
-        st.dataframe(style_table(df), use_container_width=True)
 
     elif mode == "Vs Each Other":
-        rows = []
-        for _, row in raw.iterrows():
-            fund = str(row["Ticker"]).replace("M:","")
-            meta = fund_map.get(fund,{})
+        for fund, meta in fund_map.items():
+            if fund not in raw["Ticker"].values:
+                continue
+            row = raw.loc[raw["Ticker"] == fund].iloc[0]
+
+            fund_val = row.get(period_key, None)
+            if pd.isna(fund_val):
+                continue
+
             rows.append({
                 "Fund": fund,
-                "Asset Class": meta.get("asset_class",""),
-                "Purpose": meta.get("purpose",""),
-                "Strategy": meta.get("strategy",""),
-                f"Total Return ({period_key})": row[period_key],
-                "Sharpe": row.get(sharpe_col),
-                "Sortino": row.get(sortino_col),
-                "Max Drawdown": row.get(md_col),
-                "Expense Ratio": row.get("Expense Ratio"),
-                "Dividend Yield %": row.get("Yield")
+                "Asset Class": meta["asset_class"],
+                "Purpose": meta["purpose"],
+                "Strategy": meta["strategy"],
+                f"Return ({period_key})": fund_val,
+                "Sharpe": row.get(sharpe_col, "No Data"),
+                "Sortino": row.get(sortino_col, "No Data"),
+                "Max Drawdown": row.get(md_col, "No Data"),
+                "Expense Ratio": row.get("Expense Ratio", None),
+                "Dividend Yield %": row.get("Yield", None)
             })
-        df = pd.DataFrame(rows)
-        st.subheader(f"Funds vs Each Other — {period_key}")
-        st.dataframe(style_table(df), use_container_width=True)
 
-    custom_tickers = st.sidebar.text_input("Enter tickers for comparison")
-    custom_list = [t.strip().upper() for t in custom_tickers.split(",") if t.strip()]
-    if custom_list:
-        st.subheader("Custom Fund Comparison")
-        custom_df = raw[raw["Ticker"].str.replace("M:","").isin(custom_list)].copy()
-        if custom_df.empty:
-            st.info("No valid data for entered tickers.")
-        else:
-            st.dataframe(style_table(custom_df), use_container_width=True)
+    df = pd.DataFrame(rows)
 
-    if st.sidebar.button("Reload Data"):
+    st.subheader(mode + f" — {period_key}")
+    if df.empty:
+        st.info("No rows for current selection.")
+    else:
+        st.dataframe(df, use_container_width=True)
+
+    if st.sidebar.button("Reload data"):
         st.cache_data.clear()
         st.rerun()
-
-else:
-    st.info("Please upload your Excel file to get started.")
