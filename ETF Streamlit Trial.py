@@ -48,118 +48,98 @@ fund_map = {
     "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
-def safe_number(x):
-    try:
-        if isinstance(x, str):
-            x = x.strip()
-            if x.endswith("%"):
-                return float(x.replace("%", "")) / 100.0
-            if x.lower() == "no data":
-                return np.nan
-        return float(x)
-    except:
-        return np.nan
-
 @st.cache_data
-def load_data(file):
-    raw = pd.read_excel(file)
-    raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
+def load_data(uploaded_file):
+    raw = pd.read_excel(uploaded_file)
     raw.columns = raw.columns.str.strip()
+    raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
     return raw
 
 def style_table(df):
     if df.empty:
         return df
-
-    def pct_fmt(v):
-        return "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-
-    def num_fmt(v):
-        return "" if pd.isna(v) else f"{float(v):.2f}"
-
     fmt = {}
-    for col in df.columns:
-        if "Return" in col or "Yield" in col or "Drawdown" in col or "Expense Ratio" in col:
-            fmt[col] = pct_fmt
-        elif "Sharpe" in col or "Sortino" in col:
-            fmt[col] = num_fmt
-
+    pct_cols = [c for c in df.columns if "Return" in c or "Drawdown" in c or c in ["Expense Ratio", "Dividend Yield %"]]
+    for c in pct_cols:
+        fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+    if "Sharpe" in df.columns:
+        fmt["Sharpe"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    if "Sortino" in df.columns:
+        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
     styler = df.style.format(fmt)
     try:
         styler = styler.hide(axis="index")
-    except:
+    except Exception:
         pass
     return styler
 
 st.sidebar.title("Fund Dashboard")
 uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
-
-period_key = st.sidebar.selectbox("Period", ["YTD","1 Year","3 Year","5 Year"], index=1)
-mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+period_key = st.sidebar.selectbox("Period", ["YTD", "1 Year", "3 Year", "5 Year"], index=1)
+mode = st.sidebar.selectbox("View", ["Vs Benchmark", "Vs Each Other"], index=0)
 
 if uploaded_file:
     raw = load_data(uploaded_file)
 
-    sharpe_col = f"Sharpe {period_key.split()[0]}"
-    sortino_col = f"Sortino {period_key.split()[0]}"
-    md_col = f"Max Drawdown {period_key.split()[0]}"
+    suffix_map = {"YTD": "1Y", "1 Year": "1Y", "3 Year": "3Y", "5 Year": "5Y"}
+    suffix = suffix_map.get(period_key, "1Y")
+    sharpe_col = f"Sharpe {suffix}"
+    sortino_col = f"Sortino {suffix}"
+    md_col = f"Max Drawdown {suffix}"
 
     rows = []
     for fund, meta in fund_map.items():
         if fund not in raw["Ticker"].values:
             continue
-
-        fund_row = raw[raw["Ticker"] == fund].iloc[0]
+        fund_row = raw.loc[raw["Ticker"] == fund].iloc[0]
         bench = meta["benchmark"]
+        if bench not in raw["Ticker"].values:
+            continue
+        bench_row = raw.loc[raw["Ticker"] == bench].iloc[0]
 
         if mode == "Vs Benchmark":
-            if bench in raw["Ticker"].values:
-                bench_row = raw[raw["Ticker"] == bench].iloc[0]
-                f_ret = safe_number(fund_row[period_key])
-                b_ret = safe_number(bench_row[period_key])
-                rows.append({
-                    "Fund": fund,
-                    "Benchmark": bench,
-                    "Asset Class": meta["asset_class"],
-                    "Purpose": meta["purpose"],
-                    "Strategy": meta["strategy"],
-                    f"Fund Return ({period_key})": f_ret,
-                    f"Benchmark Return ({period_key})": b_ret,
-                    f"Excess Return ({period_key})": f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan,
-                    "Sharpe": safe_number(fund_row.get(sharpe_col, None)),
-                    "Sortino": safe_number(fund_row.get(sortino_col, None)),
-                    "Max Drawdown": safe_number(fund_row.get(md_col, None)),
-                    "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
-                    "Dividend Yield %": safe_number(fund_row["Yield"])
-                })
+            rows.append({
+                "Fund": fund,
+                "Benchmark": bench,
+                "Asset Class": meta["asset_class"],
+                "Purpose": meta["purpose"],
+                "Strategy": meta["strategy"],
+                f"Fund Return ({period_key})": fund_row[period_key],
+                f"Benchmark Return ({period_key})": bench_row[period_key],
+                f"Excess Return ({period_key})": fund_row[period_key] - bench_row[period_key],
+                "Sharpe": fund_row.get(sharpe_col, np.nan),
+                "Sortino": fund_row.get(sortino_col, np.nan),
+                "Max Drawdown": fund_row.get(md_col, np.nan),
+                "Expense Ratio": fund_row["Expense Ratio"],
+                "Dividend Yield %": fund_row["Yield"]
+            })
         else:
             rows.append({
                 "Fund": fund,
                 "Asset Class": meta["asset_class"],
                 "Purpose": meta["purpose"],
                 "Strategy": meta["strategy"],
-                f"Fund Return ({period_key})": safe_number(fund_row[period_key]),
-                "Sharpe": safe_number(fund_row.get(sharpe_col, None)),
-                "Sortino": safe_number(fund_row.get(sortino_col, None)),
-                "Max Drawdown": safe_number(fund_row.get(md_col, None)),
-                "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
-                "Dividend Yield %": safe_number(fund_row["Yield"])
+                f"Return ({period_key})": fund_row[period_key],
+                "Sharpe": fund_row.get(sharpe_col, np.nan),
+                "Sortino": fund_row.get(sortino_col, np.nan),
+                "Max Drawdown": fund_row.get(md_col, np.nan),
+                "Expense Ratio": fund_row["Expense Ratio"],
+                "Dividend Yield %": fund_row["Yield"]
             })
 
     df = pd.DataFrame(rows)
 
-    if not df.empty and "Purpose" in df.columns:
-        purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
-        selected_purpose = st.sidebar.selectbox("Filter by Purpose", purpose_options)
-        if selected_purpose != "All":
-            df = df[df["Purpose"] == selected_purpose]
+    purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
+    selected_purpose = st.sidebar.selectbox("Filter by Purpose", purpose_options)
+    if selected_purpose != "All":
+        df = df[df["Purpose"] == selected_purpose]
 
-    if st.sidebar.button("Reload Data"):
-        st.cache_data.clear()
-        st.rerun()
-
-    st.subheader(f"Funds {mode} — {period_key}")
+    st.subheader(mode + f" — {period_key}")
     if df.empty:
         st.info("No rows for current selection.")
     else:
         st.dataframe(style_table(df), use_container_width=True)
+
+    if st.sidebar.button("Reload Data"):
+        st.cache_data.clear()
+        st.rerun()
