@@ -50,22 +50,40 @@ fund_map = {
 def style_table(df):
     if df.empty:
         return df
+
+    def pct_fmt(v):
+        try:
+            return f"{float(v)*100:.2f}%"
+        except:
+            return v if isinstance(v, str) else ""
+
+    def ratio_fmt(v):
+        try:
+            return f"{float(v)*100:.2f}%"
+        except:
+            return v if isinstance(v, str) else ""
+
+    def num_fmt(v):
+        try:
+            return f"{float(v):.2f}"
+        except:
+            return v if isinstance(v, str) else ""
+
     fmt = {}
     for col in df.columns:
         if "Return" in col or "Yield" in col or "Drawdown" in col:
-            fmt[col] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+            fmt[col] = pct_fmt
         elif "Expense Ratio" in col:
-            fmt[col] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+            fmt[col] = ratio_fmt
         elif "Sharpe" in col or "Sortino" in col:
-            fmt[col] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+            fmt[col] = num_fmt
+
     styler = df.style.format(fmt)
     try:
         styler = styler.hide(axis="index")
     except Exception:
         pass
     return styler
-
-
 
 
 def get_metric_columns(period_key):
