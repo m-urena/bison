@@ -4,9 +4,6 @@ import streamlit as st
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
-# -----------------------------
-# Helpers
-# -----------------------------
 def safe_number(x):
     try:
         if isinstance(x, str):
@@ -52,9 +49,6 @@ def style_table(df):
         pass
     return styler
 
-# -----------------------------
-# Config
-# -----------------------------
 fund_map = {
     "IBIT": {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "IQDY": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income", "strategy": "Foreign"},
@@ -127,9 +121,7 @@ md_map = {
     "5Y": "Max Drawdown 5Y"
 }
 
-# -----------------------------
-# Streamlit UI
-# -----------------------------
+
 st.sidebar.title("Fund Dashboard")
 uploaded_file = st.sidebar.file_uploader("Upload Excel", type=["xlsx"])
 
