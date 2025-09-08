@@ -47,6 +47,28 @@ fund_map = {
     "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"},
 }
 
+def style_table(df):
+    if df.empty:
+        return df
+    fmt = {}
+    for col in df.columns:
+        if "Return" in col or "Yield" in col or "Drawdown" in col:
+            fmt[col] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+        elif "Expense Ratio" in col:
+            fmt[col] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+        elif "Sharpe" in col or "Sortino" in col:
+            fmt[col] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    styler = df.style.format(fmt)
+    try:
+        styler = styler.hide(axis="index")
+    except Exception:
+        pass
+    return styler
+
+# Replace your st.dataframe(df, ...) line with:
+st.dataframe(style_table(df), use_container_width=True)
+
+
 def get_metric_columns(period_key):
     if period_key in ["YTD", "1 Year"]:
         return "Sharpe 1Y", "Sortino 1Y", "Max Drawdown 1Y"
