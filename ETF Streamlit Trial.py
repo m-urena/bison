@@ -52,6 +52,7 @@ fund_map = {
 def load_data(file):
     raw = pd.read_excel(file)
     raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
+    raw.columns = raw.columns.str.strip()  # remove leading/trailing spaces
     return raw
 
 def style_table(df):
@@ -62,19 +63,19 @@ def style_table(df):
         try:
             return f"{float(v)*100:.2f}%"
         except:
-            return "No Data" if pd.isna(v) or v in ["None", "NaN"] else v
+            return "No Data"
 
     def ratio_fmt(v):
         try:
             return f"{float(v)*100:.2f}%"
         except:
-            return "No Data" if pd.isna(v) or v in ["None", "NaN"] else v
+            return "No Data"
 
     def num_fmt(v):
         try:
             return f"{float(v):.2f}"
         except:
-            return "No Data" if pd.isna(v) or v in ["None", "NaN"] else v
+            return "No Data"
 
     fmt = {}
     for col in df.columns:
@@ -129,7 +130,7 @@ if uploaded_file:
                     "Sharpe": fund_row.get(sharpe_col, None),
                     "Sortino": fund_row.get(sortino_col, None),
                     "Max Drawdown": fund_row.get(md_col, None),
-                    "Expense Ratio": fund_row[" Expense Ratio "],
+                    "Expense Ratio": fund_row["Expense Ratio"],
                     "Dividend Yield %": fund_row["Yield"]
                 })
         else:
@@ -142,7 +143,7 @@ if uploaded_file:
                 "Sharpe": fund_row.get(sharpe_col, None),
                 "Sortino": fund_row.get(sortino_col, None),
                 "Max Drawdown": fund_row.get(md_col, None),
-                "Expense Ratio": fund_row[" Expense Ratio "],
+                "Expense Ratio": fund_row["Expense Ratio"],
                 "Dividend Yield %": fund_row["Yield"]
             })
 
