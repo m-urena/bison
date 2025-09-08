@@ -97,9 +97,13 @@ def get_metric_columns(period_key):
         return None, None, None
 
 st.sidebar.title("Fund Dashboard")
-uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx", "xls"])
-period_key = st.sidebar.selectbox("Period", ["YTD", "1 Year", "3 Year Total", "3 Year Annualized", "5 Year Total", "5 Year Annualized"], index=1)
-mode = st.sidebar.selectbox("View", ["Vs Benchmark", "Vs Each Other"], index=0)
+period_key = st.sidebar.selectbox("Period", ["YTD","1 Year","3 Year","5 Year"], index=1)
+mode = st.sidebar.selectbox("View", ["Vs Benchmark","Vs Each Other"], index=0)
+purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
+selected_purpose = st.sidebar.selectbox("Filter by Purpose", purpose_options)
+
+if selected_purpose != "All":
+    df = df[df["Purpose"] == selected_purpose]
 
 if uploaded_file:
     raw = pd.read_excel(uploaded_file)
