@@ -4,6 +4,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Fund Dashboard", layout="wide")
 
+# ---------------- SAFE NUMBER CLEANER ----------------
 def safe_number(x):
     try:
         if isinstance(x, str):
@@ -16,39 +17,55 @@ def safe_number(x):
     except:
         return np.nan
 
-@st.cache_data
-def load_data(file):
-    raw = pd.read_excel(file)
-    raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
-    raw.columns = raw.columns.str.strip()
-    return raw
+# ---------------- NORMALIZATION ----------------
+def normalize(series, reverse=False):
+    s = pd.Series(series, dtype=float).copy()
+    if reverse:
+        s = -s
+    if s.nunique() <= 1:
+        return pd.Series([1] * len(s), index=s.index)
+    return (s - s.min()) / (s.max() - s.min())
 
-def style_table(df):
-    if df.empty:
-        return df
+# ---------------- WEIGHTS ----------------
+scoring_weights = {
+    "Excess Return": 0.35,
+    "Sharpe": 0.10,
+    "Sortino": 0.20,
+    "Max Drawdown": 0.10,
+    "Expense Ratio": 0.15,
+    "Dividend Yield %": 0.10
+}
 
-    fmt = {}
-    pct_cols = [c for c in df.columns if "Return" in c or "Drawdown" in c or c in ["Expense Ratio", "Dividend Yield %"]]
-    for c in pct_cols:
-        if c == "Expense Ratio":
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-        elif c == "Dividend Yield %":
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-        else:
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+# ---------------- PERIOD MAPS ----------------
+period_map = {
+    "YTD": "YTD",
+    "1Y": "1 Year",
+    "3Y": "3 Year Annualized",
+    "5Y": "5 Year Annualized"
+}
 
-    if "Sharpe" in df.columns:
-        fmt["Sharpe"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
-    if "Sortino" in df.columns:
-        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+sharpe_map = {
+    "YTD": "Sharpe 1Y",
+    "1Y": "Sharpe 1Y",
+    "3Y": "Sharpe 3Y",
+    "5Y": "Sharpe 5Y"
+}
 
-    styler = df.style.format(fmt)
-    try:
-        styler = styler.hide(axis="index")
-    except Exception:
-        pass
-    return styler
+sortino_map = {
+    "YTD": "Sortino 1Y",
+    "1Y": "Sortino 1Y",
+    "3Y": "Sortino 3Y",
+    "5Y": "Sortino 5Y"
+}
 
+md_map = {
+    "YTD": "Max Drawdown 1Y",
+    "1Y": "Max Drawdown 1Y",
+    "3Y": "Max Drawdown 3Y",
+    "5Y": "Max Drawdown 5Y"
+}
+
+# ---------------- FUND MAP ----------------
 fund_map = {
     "IBIT": {"benchmark": "IBIT", "asset_class": "Equity", "purpose": "Accumulation", "strategy": "Thematic"},
     "IQDY": {"benchmark": "ACWX", "asset_class": "Equity", "purpose": "Income", "strategy": "Foreign"},
@@ -93,76 +110,85 @@ fund_map = {
     "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
-period_map = {
-    "YTD": "YTD",
-    "1Y": "1 Year",
-    "3Y": "3 Year Annualized",
-    "5Y": "5 Year Annualized"
-}
+# ---------------- SCORING ----------------
+def add_scores(df, period_key):
+    df = df.copy()
 
-sharpe_map = {
-    "YTD": "Sharpe 1Y",
-    "1Y": "Sharpe 1Y",
-    "3Y": "Sharpe 3Y",
-    "5Y": "Sharpe 5Y"
-}
+    if period_key in ["YTD", "1Y"]:
+        ex_col = "Excess Return (1Y)"
+        sh_col = "Sharpe 1Y"
+        so_col = "Sortino 1Y"
+        md_col = "Max Drawdown 1Y"
+    elif period_key == "3Y":
+        ex_col = "Excess Return (3Y)"
+        sh_col = "Sharpe 3Y"
+        so_col = "Sortino 3Y"
+        md_col = "Max Drawdown 3Y"
+    else:  # 5Y
+        ex_col = "Excess Return (5Y)"
+        sh_col = "Sharpe 5Y"
+        so_col = "Sortino 5Y"
+        md_col = "Max Drawdown 5Y"
 
-sortino_map = {
-    "YTD": "Sortino 1Y",
-    "1Y": "Sortino 1Y",
-    "3Y": "Sortino 3Y",
-    "5Y": "Sortino 5Y"
-}
+    df["_ex"] = normalize(df[ex_col])
+    df["_sh"] = normalize(df[sh_col])
+    df["_so"] = normalize(df[so_col])
+    df["_md"] = normalize(df[md_col], reverse=True)
+    df["_er"] = normalize(df["Expense Ratio"], reverse=True)
+    df["_dy"] = normalize(df["Dividend Yield %"])
 
-md_map = {
-    "YTD": "Max Drawdown 1Y",
-    "1Y": "Max Drawdown 1Y",
-    "3Y": "Max Drawdown 3Y",
-    "5Y": "Max Drawdown 5Y"
-}
+    df["Score"] = (
+        df["_ex"] * scoring_weights["Excess Return"]
+        + df["_sh"] * scoring_weights["Sharpe"]
+        + df["_so"] * scoring_weights["Sortino"]
+        + df["_md"] * scoring_weights["Max Drawdown"]
+        + df["_er"] * scoring_weights["Expense Ratio"]
+        + df["_dy"] * scoring_weights["Dividend Yield %"]
+    )
 
+    return df.drop(columns=["_ex", "_sh", "_so", "_md", "_er", "_dy"])
 
+# ---------------- UI ----------------
 st.sidebar.title("Fund Dashboard")
-uploaded_file = st.sidebar.file_uploader("Upload Excel", type=["xlsx"])
-
+uploaded_file = st.sidebar.file_uploader("Upload Excel File", type=["xlsx"])
 period_key = st.sidebar.selectbox("Period", ["YTD", "1Y", "3Y", "5Y"], index=1)
 mode = st.sidebar.selectbox("View", ["Vs Benchmark", "Vs Each Other"], index=0)
 
 if uploaded_file:
-    raw = load_data(uploaded_file)
-
-    col = period_map[period_key]
-    sharpe_col = sharpe_map[period_key]
-    sortino_col = sortino_map[period_key]
-    md_col = md_map[period_key]
+    raw = pd.read_excel(uploaded_file)
+    raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
 
     rows = []
     for fund, meta in fund_map.items():
-        fund_row = raw[raw["Ticker"] == fund]
+        fund_row = raw.loc[raw["Ticker"] == fund]
+        bench_row = raw.loc[raw["Ticker"] == meta["benchmark"]]
+
         if fund_row.empty:
             continue
         fund_row = fund_row.iloc[0]
-
-        bench = meta["benchmark"]
-        bench_row = raw[raw["Ticker"] == bench]
         bench_row = bench_row.iloc[0] if not bench_row.empty else None
 
+        col = period_map[period_key]
         f_ret = safe_number(fund_row[col])
         b_ret = safe_number(bench_row[col]) if bench_row is not None else np.nan
+
+        sharpe_col = sharpe_map[period_key]
+        sortino_col = sortino_map[period_key]
+        md_col = md_map[period_key]
 
         if mode == "Vs Benchmark":
             rows.append({
                 "Fund": fund,
-                "Benchmark": bench,
+                "Benchmark": meta["benchmark"],
                 "Asset Class": meta["asset_class"],
                 "Purpose": meta["purpose"],
                 "Strategy": meta["strategy"],
                 f"Fund Return ({period_key})": f_ret,
                 f"Benchmark Return ({period_key})": b_ret,
                 f"Excess Return ({period_key})": f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan,
-                "Sharpe": safe_number(fund_row.get(sharpe_col, np.nan)),
-                "Sortino": safe_number(fund_row.get(sortino_col, np.nan)),
-                "Max Drawdown": safe_number(fund_row.get(md_col, np.nan)),
+                "Sharpe " + period_key: safe_number(fund_row.get(sharpe_col, np.nan)),
+                "Sortino " + period_key: safe_number(fund_row.get(sortino_col, np.nan)),
+                "Max Drawdown " + period_key: safe_number(fund_row.get(md_col, np.nan)),
                 "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
                 "Dividend Yield %": safe_number(fund_row["Yield"])
             })
@@ -173,27 +199,26 @@ if uploaded_file:
                 "Purpose": meta["purpose"],
                 "Strategy": meta["strategy"],
                 f"Return ({period_key})": f_ret,
-                "Sharpe": safe_number(fund_row.get(sharpe_col, np.nan)),
-                "Sortino": safe_number(fund_row.get(sortino_col, np.nan)),
-                "Max Drawdown": safe_number(fund_row.get(md_col, np.nan)),
+                "Sharpe " + period_key: safe_number(fund_row.get(sharpe_col, np.nan)),
+                "Sortino " + period_key: safe_number(fund_row.get(sortino_col, np.nan)),
+                "Max Drawdown " + period_key: safe_number(fund_row.get(md_col, np.nan)),
                 "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
                 "Dividend Yield %": safe_number(fund_row["Yield"])
             })
 
     df = pd.DataFrame(rows)
 
-    if not df.empty and "Purpose" in df.columns:
+    if not df.empty:
+        df = add_scores(df, period_key)
+        df = df.sort_values("Score", ascending=False)
+
         purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
         selected_purpose = st.sidebar.selectbox("Filter by Purpose", purpose_options)
+
         if selected_purpose != "All":
             df = df[df["Purpose"] == selected_purpose]
 
-    if st.sidebar.button("Reload Data"):
-        st.cache_data.clear()
-        st.rerun()
-
-    st.subheader(mode + f" — {period_key}")
-    if df.empty:
-        st.info("No rows for current selection.")
+        st.subheader(mode + f" — {period_key}")
+        st.dataframe(df, use_container_width=True)
     else:
-        st.dataframe(style_table(df), use_container_width=True)
+        st.info("No rows for current selection.")
