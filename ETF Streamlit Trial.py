@@ -48,11 +48,23 @@ fund_map = {
     "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
+def safe_number(x):
+    try:
+        if isinstance(x, str):
+            x = x.strip()
+            if x.endswith("%"):
+                return float(x.replace("%", "")) / 100.0
+            if x.lower() == "no data":
+                return np.nan
+        return float(x)
+    except:
+        return np.nan
+
 @st.cache_data
 def load_data(file):
     raw = pd.read_excel(file)
     raw = raw.rename(columns={raw.columns[0]: "Ticker", raw.columns[1]: "Name"})
-    raw.columns = raw.columns.str.strip()  # remove leading/trailing spaces
+    raw.columns = raw.columns.str.strip()
     return raw
 
 def style_table(df):
@@ -60,29 +72,15 @@ def style_table(df):
         return df
 
     def pct_fmt(v):
-        try:
-            return f"{float(v)*100:.2f}%"
-        except:
-            return "No Data"
-
-    def ratio_fmt(v):
-        try:
-            return f"{float(v)*100:.2f}%"
-        except:
-            return "No Data"
+        return "" if pd.isna(v) else f"{float(v)*100:.2f}%"
 
     def num_fmt(v):
-        try:
-            return f"{float(v):.2f}"
-        except:
-            return "No Data"
+        return "" if pd.isna(v) else f"{float(v):.2f}"
 
     fmt = {}
     for col in df.columns:
-        if "Return" in col or "Yield" in col or "Drawdown" in col:
+        if "Return" in col or "Yield" in col or "Drawdown" in col or "Expense Ratio" in col:
             fmt[col] = pct_fmt
-        elif "Expense Ratio" in col:
-            fmt[col] = ratio_fmt
         elif "Sharpe" in col or "Sortino" in col:
             fmt[col] = num_fmt
 
@@ -93,7 +91,6 @@ def style_table(df):
         pass
     return styler
 
-# Sidebar
 st.sidebar.title("Fund Dashboard")
 uploaded_file = st.sidebar.file_uploader("Upload Excel file", type=["xlsx"])
 
@@ -118,20 +115,22 @@ if uploaded_file:
         if mode == "Vs Benchmark":
             if bench in raw["Ticker"].values:
                 bench_row = raw[raw["Ticker"] == bench].iloc[0]
+                f_ret = safe_number(fund_row[period_key])
+                b_ret = safe_number(bench_row[period_key])
                 rows.append({
                     "Fund": fund,
                     "Benchmark": bench,
                     "Asset Class": meta["asset_class"],
                     "Purpose": meta["purpose"],
                     "Strategy": meta["strategy"],
-                    f"Fund Return ({period_key})": fund_row[period_key],
-                    f"Benchmark Return ({period_key})": bench_row[period_key],
-                    f"Excess Return ({period_key})": fund_row[period_key] - bench_row[period_key],
-                    "Sharpe": fund_row.get(sharpe_col, None),
-                    "Sortino": fund_row.get(sortino_col, None),
-                    "Max Drawdown": fund_row.get(md_col, None),
-                    "Expense Ratio": fund_row["Expense Ratio"],
-                    "Dividend Yield %": fund_row["Yield"]
+                    f"Fund Return ({period_key})": f_ret,
+                    f"Benchmark Return ({period_key})": b_ret,
+                    f"Excess Return ({period_key})": f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan,
+                    "Sharpe": safe_number(fund_row.get(sharpe_col, None)),
+                    "Sortino": safe_number(fund_row.get(sortino_col, None)),
+                    "Max Drawdown": safe_number(fund_row.get(md_col, None)),
+                    "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
+                    "Dividend Yield %": safe_number(fund_row["Yield"])
                 })
         else:
             rows.append({
@@ -139,17 +138,16 @@ if uploaded_file:
                 "Asset Class": meta["asset_class"],
                 "Purpose": meta["purpose"],
                 "Strategy": meta["strategy"],
-                f"Fund Return ({period_key})": fund_row[period_key],
-                "Sharpe": fund_row.get(sharpe_col, None),
-                "Sortino": fund_row.get(sortino_col, None),
-                "Max Drawdown": fund_row.get(md_col, None),
-                "Expense Ratio": fund_row["Expense Ratio"],
-                "Dividend Yield %": fund_row["Yield"]
+                f"Fund Return ({period_key})": safe_number(fund_row[period_key]),
+                "Sharpe": safe_number(fund_row.get(sharpe_col, None)),
+                "Sortino": safe_number(fund_row.get(sortino_col, None)),
+                "Max Drawdown": safe_number(fund_row.get(md_col, None)),
+                "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
+                "Dividend Yield %": safe_number(fund_row["Yield"])
             })
 
     df = pd.DataFrame(rows)
 
-    # Purpose filter
     if not df.empty and "Purpose" in df.columns:
         purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
         selected_purpose = st.sidebar.selectbox("Filter by Purpose", purpose_options)
