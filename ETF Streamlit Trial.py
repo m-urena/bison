@@ -110,22 +110,21 @@ fund_map = {
     "CPITX": {"benchmark": "HYG", "asset_class": "Fixed Income", "purpose": "Income", "strategy": "High Yield"}
 }
 
-# ---------------- SCORING ----------------
-def add_scores(df, period_key):
+def add_scores(df, period_key, mode):
     df = df.copy()
 
     if period_key in ["YTD", "1Y"]:
-        ex_col = "Excess Return (1Y)"
+        ex_col = "Excess Return (1Y)" if mode == "Vs Benchmark" else "Return (1Y)"
         sh_col = "Sharpe 1Y"
         so_col = "Sortino 1Y"
         md_col = "Max Drawdown 1Y"
     elif period_key == "3Y":
-        ex_col = "Excess Return (3Y)"
+        ex_col = "Excess Return (3Y)" if mode == "Vs Benchmark" else "Return (3Y)"
         sh_col = "Sharpe 3Y"
         so_col = "Sortino 3Y"
         md_col = "Max Drawdown 3Y"
     else:  # 5Y
-        ex_col = "Excess Return (5Y)"
+        ex_col = "Excess Return (5Y)" if mode == "Vs Benchmark" else "Return (5Y)"
         sh_col = "Sharpe 5Y"
         so_col = "Sortino 5Y"
         md_col = "Max Drawdown 5Y"
@@ -147,6 +146,7 @@ def add_scores(df, period_key):
     )
 
     return df.drop(columns=["_ex", "_sh", "_so", "_md", "_er", "_dy"])
+
 
 # ---------------- UI ----------------
 st.sidebar.title("Fund Dashboard")
@@ -209,7 +209,7 @@ if uploaded_file:
     df = pd.DataFrame(rows)
 
     if not df.empty:
-        df = add_scores(df, period_key)
+       df = add_scores(df, period_key, mode)
         df = df.sort_values("Score", ascending=False)
 
         purpose_options = ["All"] + sorted(df["Purpose"].dropna().unique().tolist())
