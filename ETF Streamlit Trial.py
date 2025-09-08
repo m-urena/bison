@@ -65,8 +65,7 @@ def style_table(df):
         pass
     return styler
 
-# Replace your st.dataframe(df, ...) line with:
-st.dataframe(style_table(df), use_container_width=True)
+
 
 
 def get_metric_columns(period_key):
@@ -154,7 +153,7 @@ if uploaded_file:
     if df.empty:
         st.info("No rows for current selection.")
     else:
-        st.dataframe(df, use_container_width=True)
+         st.dataframe(style_table(df), use_container_width=True)
 
     if st.sidebar.button("Reload data"):
         st.cache_data.clear()
