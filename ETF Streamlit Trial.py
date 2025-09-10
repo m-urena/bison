@@ -167,7 +167,7 @@ if uploaded_file:
         b_sharpe = safe_number(bench_row.get(sharpe_col, np.nan)) if bench_row is not None else np.nan
         b_sortino = safe_number(bench_row.get(sortino_col, np.nan)) if bench_row is not None else np.nan
 
-                if mode == "Vs Benchmark":
+        if mode == "Vs Benchmark":
             if pd.isna(f_ret) or pd.isna(b_ret):
                 continue  # skip funds without valid data for this period
 
