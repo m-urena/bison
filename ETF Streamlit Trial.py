@@ -30,20 +30,21 @@ def style_table(df):
     if df.empty:
         return df
 
-    fmt = {}
-    pct_cols = [c for c in df.columns if "Return" in c or "Drawdown" in c or c in ["Expense Ratio", "Dividend Yield %"]]
-    for c in pct_cols:
-        if c == "Expense Ratio":
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-        elif c == "Dividend Yield %":
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
-        else:
-            fmt[c] = lambda v: "" if pd.isna(v) else f"{float(v)*100:.2f}%"
+    def safe_fmt(v, as_percent=False):
+        try:
+            if pd.isna(v):
+                return ""
+            v = float(v)
+            return f"{v*100:.2f}%" if as_percent else f"{v:.2f}"
+        except:
+            return ""
 
-    if "Sharpe" in df.columns:
-        fmt["Sharpe"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
-    if "Sortino" in df.columns:
-        fmt["Sortino"] = lambda v: "" if pd.isna(v) else f"{float(v):.2f}"
+    fmt = {}
+    for c in df.columns:
+        if "Return" in c or "Drawdown" in c or c in ["Expense Ratio", "Dividend Yield %"]:
+            fmt[c] = lambda v, _c=c: safe_fmt(v, as_percent=True)
+        elif "Sharpe" in c or "Sortino" in c:
+            fmt[c] = lambda v, _c=c: safe_fmt(v, as_percent=False)
 
     styler = df.style.format(fmt)
     try:
@@ -156,7 +157,13 @@ if uploaded_file:
         bench_row = bench_row.iloc[0] if not bench_row.empty else None
 
         f_ret = safe_number(fund_row[col])
+        f_sharpe = safe_number(fund_row.get(sharpe_col, np.nan))
+        f_sortino = safe_number(fund_row.get(sortino_col, np.nan))
+        f_md = safe_number(fund_row.get(md_col, np.nan))
+
         b_ret = safe_number(bench_row[col]) if bench_row is not None else np.nan
+        b_sharpe = safe_number(bench_row.get(sharpe_col, np.nan)) if bench_row is not None else np.nan
+        b_sortino = safe_number(bench_row.get(sortino_col, np.nan)) if bench_row is not None else np.nan
 
         if mode == "Vs Benchmark":
             rows.append({
@@ -168,9 +175,13 @@ if uploaded_file:
                 f"Fund Return ({period_key})": f_ret,
                 f"Benchmark Return ({period_key})": b_ret,
                 f"Excess Return ({period_key})": f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan,
-                "Sharpe": safe_number(fund_row.get(sharpe_col, np.nan)),
-                "Sortino": safe_number(fund_row.get(sortino_col, np.nan)),
-                "Max Drawdown": safe_number(fund_row.get(md_col, np.nan)),
+                "Sharpe": f_sharpe,
+                "Benchmark Sharpe": b_sharpe,
+                "Excess Sharpe": f_sharpe - b_sharpe if pd.notna(f_sharpe) and pd.notna(b_sharpe) else np.nan,
+                "Sortino": f_sortino,
+                "Benchmark Sortino": b_sortino,
+                "Excess Sortino": f_sortino - b_sortino if pd.notna(f_sortino) and pd.notna(b_sortino) else np.nan,
+                "Max Drawdown": f_md,
                 "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
                 "Dividend Yield %": safe_number(fund_row["Yield"])
             })
@@ -181,9 +192,9 @@ if uploaded_file:
                 "Purpose": meta["purpose"],
                 "Strategy": meta["strategy"],
                 f"Return ({period_key})": f_ret,
-                "Sharpe": safe_number(fund_row.get(sharpe_col, np.nan)),
-                "Sortino": safe_number(fund_row.get(sortino_col, np.nan)),
-                "Max Drawdown": safe_number(fund_row.get(md_col, np.nan)),
+                "Sharpe": f_sharpe,
+                "Sortino": f_sortino,
+                "Max Drawdown": f_md,
                 "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
                 "Dividend Yield %": safe_number(fund_row["Yield"])
             })
