@@ -167,8 +167,11 @@ if uploaded_file:
         b_sharpe = safe_number(bench_row.get(sharpe_col, np.nan)) if bench_row is not None else np.nan
         b_sortino = safe_number(bench_row.get(sortino_col, np.nan)) if bench_row is not None else np.nan
 
-        if mode == "Vs Benchmark":
-            excess_ret = f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan
+                if mode == "Vs Benchmark":
+            if pd.isna(f_ret) or pd.isna(b_ret):
+                continue  # skip funds without valid data for this period
+
+            excess_ret = f_ret - b_ret
             excess_sharpe = f_sharpe - b_sharpe if pd.notna(f_sharpe) and pd.notna(b_sharpe) else np.nan
             excess_sortino = f_sortino - b_sortino if pd.notna(f_sortino) and pd.notna(b_sortino) else np.nan
 
@@ -200,6 +203,7 @@ if uploaded_file:
                 "Dividend Yield %": safe_number(fund_row["Yield"]),
                 "Points": points
             })
+
         else:
             rows.append({
                 "Fund": fund,
