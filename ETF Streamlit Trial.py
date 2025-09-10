@@ -45,6 +45,8 @@ def style_table(df):
             fmt[c] = lambda v, _c=c: safe_fmt(v, as_percent=True)
         elif "Sharpe" in c or "Sortino" in c:
             fmt[c] = lambda v, _c=c: safe_fmt(v, as_percent=False)
+        elif c == "Points":
+            fmt[c] = lambda v: str(int(v)) if pd.notna(v) else ""
 
     styler = df.style.format(fmt)
     try:
@@ -166,6 +168,18 @@ if uploaded_file:
         b_sortino = safe_number(bench_row.get(sortino_col, np.nan)) if bench_row is not None else np.nan
 
         if mode == "Vs Benchmark":
+            excess_ret = f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan
+            excess_sharpe = f_sharpe - b_sharpe if pd.notna(f_sharpe) and pd.notna(b_sharpe) else np.nan
+            excess_sortino = f_sortino - b_sortino if pd.notna(f_sortino) and pd.notna(b_sortino) else np.nan
+
+            points = 0
+            if pd.notna(excess_sortino) and excess_sortino > 0:
+                points += 1
+            if pd.notna(excess_sharpe) and excess_sharpe > 0:
+                points += 1
+            if pd.notna(excess_ret) and excess_ret > -0.02:
+                points += 1
+
             rows.append({
                 "Fund": fund,
                 "Benchmark": bench,
@@ -174,16 +188,17 @@ if uploaded_file:
                 "Strategy": meta["strategy"],
                 f"Fund Return ({period_key})": f_ret,
                 f"Benchmark Return ({period_key})": b_ret,
-                f"Excess Return ({period_key})": f_ret - b_ret if pd.notna(f_ret) and pd.notna(b_ret) else np.nan,
+                f"Excess Return ({period_key})": excess_ret,
                 "Sharpe": f_sharpe,
                 "Benchmark Sharpe": b_sharpe,
-                "Excess Sharpe": f_sharpe - b_sharpe if pd.notna(f_sharpe) and pd.notna(b_sharpe) else np.nan,
+                "Excess Sharpe": excess_sharpe,
                 "Sortino": f_sortino,
                 "Benchmark Sortino": b_sortino,
-                "Excess Sortino": f_sortino - b_sortino if pd.notna(f_sortino) and pd.notna(b_sortino) else np.nan,
+                "Excess Sortino": excess_sortino,
                 "Max Drawdown": f_md,
                 "Expense Ratio": safe_number(fund_row["Expense Ratio"]),
-                "Dividend Yield %": safe_number(fund_row["Yield"])
+                "Dividend Yield %": safe_number(fund_row["Yield"]),
+                "Points": points
             })
         else:
             rows.append({
